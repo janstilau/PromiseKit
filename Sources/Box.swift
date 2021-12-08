@@ -1,7 +1,12 @@
 import Dispatch
 
+/*
+    这里, 对于类的设计过于复杂了.
+ */
 enum Sealant<R> {
+    // 如果是在 Pending 状态, 那么 value 部分, 存储的是一个个的 Handler
     case pending(Handlers<R>)
+    // 如果是在 resolved 状态, 那么 value 部分, 就是存储的 R. Result. 可能是 Fulfilled, 也可能是 Rejected.
     case resolved(R)
 }
 
@@ -10,7 +15,6 @@ final class Handlers<R> {
     func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
 }
 
-/// - Remark: not protocol ∵ http://www.russbishop.net/swift-associated-types-cont
 class Box<T> {
     func inspect() -> Sealant<T> { fatalError() }
     func inspect(_: (Sealant<T>) -> Void) { fatalError() }
@@ -19,43 +23,48 @@ class Box<T> {
 
 final class SealedBox<T>: Box<T> {
     let value: T
-
+    
     init(value: T) {
         self.value = value
     }
-
+    
+    // 特殊的 Box, 状态不会发生任何改变, 一个不可变对象.
+    // 不用考虑线程问题. 
     override func inspect() -> Sealant<T> {
         return .resolved(value)
     }
 }
 
 class EmptyBox<T>: Box<T> {
+    
     private var sealant = Sealant<T>.pending(.init())
+    
+    /*
+        使用, DispatchQueue 来解决线程问题的思路就是 .
+        如果是 Get 函数, 就是设置返回值, 将赋值操作, 用 sync 的执行 Block.
+        如果是 Set 函数, 
+     */
     private let barrier = DispatchQueue(label: "org.promisekit.barrier", attributes: .concurrent)
-
+    
+    // 当, Box 从 Pending 变为 Resolved 的时候, 要把所有的回调取出来调用一次, 并且清空回调 .
+    // 然后, 将自己的状态, 变为是 .resolved 的状态.
+    
+    // 因为, 这是一个可变类型, 所以要考虑线程问题.
     override func seal(_ value: T) {
         var handlers: Handlers<T>!
         barrier.sync(flags: .barrier) {
             guard case .pending(let _handlers) = self.sealant else {
-                return  // already fulfilled!
+                return
             }
             handlers = _handlers
             self.sealant = .resolved(value)
         }
-
-        //FIXME we are resolved so should `pipe(to:)` be called at this instant, “thens are called in order” would be invalid
-        //NOTE we don’t do this in the above `sync` because that could potentially deadlock
-        //THOUGH since `then` etc. typically invoke after a run-loop cycle, this issue is somewhat less severe
-
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }
-
-        //TODO solution is an unfortunate third state “sealed” where then's get added
-        // to a separate handler pool for that state
-        // any other solution has potential races
     }
-
+    
+    // 因为, 这是一个可变类型, 所以在进行 Get 请求的时候, 需要考虑到线程的问题.
     override func inspect() -> Sealant<T> {
         var rv: Sealant<T>!
         barrier.sync {
@@ -63,9 +72,18 @@ class EmptyBox<T>: Box<T> {
         }
         return rv
     }
-
+    
+    // 因为, 这是一个可变类型, 所以要考虑到线程问题.
+    // 现在的需求是, 需要 Body 的执行过程中, 保持线程独占. 这是使用的技术是, barrier queue.
     override func inspect(_ body: (Sealant<T>) -> Void) {
         var sealed = false
+        /*
+         When submitted to a concurrent queue, a work item with this flag acts as a barrier.
+         Work items submitted prior to the barrier execute to completion, at which point the barrier work item executes.
+         Once the barrier work item finishes, the queue returns to scheduling work items that were submitted after the barrier.
+         
+         barrier 应该更多的是和队列调度相关.
+         */
         barrier.sync(flags: .barrier) {
             switch sealant {
             case .pending:

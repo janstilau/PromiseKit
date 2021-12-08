@@ -1,33 +1,33 @@
 import class Foundation.Thread
 import Dispatch
 
-/**
+/*
  A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  - See: `Thenable`
-*/
+ */
 public final class Guarantee<T>: Thenable {
     let box: PromiseKit.Box<T>
-
+    
     fileprivate init(box: SealedBox<T>) {
         self.box = box
     }
-
+    
     /// Returns a `Guarantee` sealed with the provided value.
     public static func value(_ value: T) -> Guarantee<T> {
         return .init(box: SealedBox(value: value))
     }
-
+    
     /// Returns a pending `Guarantee` that can be resolved with the provided closure’s parameter.
     public init(resolver body: (@escaping(T) -> Void) -> Void) {
         box = Box()
         body(box.seal)
     }
-
+    
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
         pipe{ to(.fulfilled($0)) }
     }
-
+    
     func pipe(to: @escaping(T) -> Void) {
         switch box.inspect() {
         case .pending:
@@ -43,7 +43,7 @@ public final class Guarantee<T>: Thenable {
             to(value)
         }
     }
-
+    
     /// - See: `Thenable.result`
     public var result: Result<T>? {
         switch box.inspect() {
@@ -53,7 +53,7 @@ public final class Guarantee<T>: Thenable {
             return .fulfilled(value)
         }
     }
-
+    
     final private class Box<T>: EmptyBox<T> {
         deinit {
             switch inspect() {
@@ -64,11 +64,11 @@ public final class Guarantee<T>: Thenable {
             }
         }
     }
-
+    
     init(_: PMKUnambiguousInitializer) {
         box = Box()
     }
-
+    
     /// Returns a tuple of a pending `Guarantee` and a function that resolves it.
     public class func pending() -> (guarantee: Guarantee<T>, resolve: (T) -> Void) {
         return { ($0, $0.box.seal) }(Guarantee<T>(.pending))
@@ -94,7 +94,7 @@ public extension Guarantee {
             return $0
         }
     }
-
+    
     func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> U) -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
@@ -104,8 +104,8 @@ public extension Guarantee {
         }
         return rg
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T, U>) -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
@@ -115,8 +115,8 @@ public extension Guarantee {
         }
         return rg
     }
-    #endif
-
+#endif
+    
     @discardableResult
     func then<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Guarantee<U>) -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
@@ -127,7 +127,7 @@ public extension Guarantee {
         }
         return rg
     }
-
+    
     func asVoid() -> Guarantee<Void> {
         return map(on: nil) { _ in }
     }
@@ -137,13 +137,13 @@ public extension Guarantee {
      any part of your chain may use. Like the main thread for example.
      */
     func wait() -> T {
-
+        
         if Thread.isMainThread {
             conf.logHandler(.waitOnMainThread)
         }
-
+        
         var result = value
-
+        
         if result == nil {
             let group = DispatchGroup()
             group.enter()
@@ -158,95 +158,95 @@ public extension Guarantee {
 public extension Guarantee where T: Sequence {
     /**
      `Guarantee<[T]>` => `T` -> `U` => `Guarantee<[U]>`
-
-         Guarantee.value([1,2,3])
-            .mapValues { integer in integer * 2 }
-            .done {
-                // $0 => [2,4,6]
-            }
+     
+     Guarantee.value([1,2,3])
+     .mapValues { integer in integer * 2 }
+     .done {
+     // $0 => [2,4,6]
+     }
      */
     func mapValues<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { $0.map(transform) }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Guarantee<[T]>` => `KeyPath<T, U>` => `Guarantee<[U]>`
-
-         Guarantee.value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")])
-            .mapValues(\.name)
-            .done {
-                // $0 => ["Max", "Roman", "John"]
-            }
+     
+     Guarantee.value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")])
+     .mapValues(\.name)
+     .done {
+     // $0 => ["Max", "Roman", "John"]
+     }
      */
     func mapValues<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U>) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { $0.map { $0[keyPath: keyPath] } }
     }
-    #endif
-
+#endif
+    
     /**
      `Guarantee<[T]>` => `T` -> `[U]` => `Guarantee<[U]>`
-
-         Guarantee.value([1,2,3])
-            .flatMapValues { integer in [integer, integer] }
-            .done {
-                // $0 => [1,1,2,2,3,3]
-            }
+     
+     Guarantee.value([1,2,3])
+     .flatMapValues { integer in [integer, integer] }
+     .done {
+     // $0 => [1,1,2,2,3,3]
+     }
      */
     func flatMapValues<U: Sequence>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.Iterator.Element]> {
         return map(on: on, flags: flags) { (foo: T) in
             foo.flatMap { transform($0) }
         }
     }
-
+    
     /**
      `Guarantee<[T]>` => `T` -> `U?` => `Guarantee<[U]>`
-
-         Guarantee.value(["1","2","a","3"])
-            .compactMapValues { Int($0) }
-            .done {
-                // $0 => [1,2,3]
-            }
+     
+     Guarantee.value(["1","2","a","3"])
+     .compactMapValues { Int($0) }
+     .done {
+     // $0 => [1,2,3]
+     }
      */
     func compactMapValues<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U?) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
-            #if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
+#if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
             return foo.flatMap(transform)
-            #else
+#else
             return foo.compactMap(transform)
-            #endif
+#endif
         }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Guarantee<[T]>` => `KeyPath<T, U?>` => `Guarantee<[U]>`
-
-         Guarantee.value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)])
-            .compactMapValues(\.age)
-            .done {
-                // $0 => [26, 23]
-            }
+     
+     Guarantee.value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)])
+     .compactMapValues(\.age)
+     .done {
+     // $0 => [26, 23]
+     }
      */
     func compactMapValues<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U?>) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
-            #if !swift(>=4.1)
+#if !swift(>=4.1)
             return foo.flatMap { $0[keyPath: keyPath] }
-            #else
+#else
             return foo.compactMap { $0[keyPath: keyPath] }
-            #endif
+#endif
         }
     }
-    #endif
-
+#endif
+    
     /**
      `Guarantee<[T]>` => `T` -> `Guarantee<U>` => `Guaranetee<[U]>`
-
-         Guarantee.value([1,2,3])
-            .thenMap { .value($0 * 2) }
-            .done {
-                // $0 => [2,4,6]
-            }
+     
+     Guarantee.value([1,2,3])
+     .thenMap { .value($0 * 2) }
+     .done {
+     // $0 => [2,4,6]
+     }
      */
     func thenMap<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> Guarantee<U>) -> Guarantee<[U]> {
         return then(on: on, flags: flags) {
@@ -256,15 +256,15 @@ public extension Guarantee where T: Sequence {
             fatalError(String(describing: $0))
         }
     }
-
+    
     /**
      `Guarantee<[T]>` => `T` -> `Guarantee<[U]>` => `Guarantee<[U]>`
-
-         Guarantee.value([1,2,3])
-            .thenFlatMap { integer in .value([integer, integer]) }
-            .done {
-                // $0 => [1,1,2,2,3,3]
-            }
+     
+     Guarantee.value([1,2,3])
+     .thenFlatMap { integer in .value([integer, integer]) }
+     .done {
+     // $0 => [1,1,2,2,3,3]
+     }
      */
     func thenFlatMap<U: Thenable>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.T.Iterator.Element]> where U.T: Sequence {
         return then(on: on, flags: flags) {
@@ -276,47 +276,47 @@ public extension Guarantee where T: Sequence {
             fatalError(String(describing: $0))
         }
     }
-
+    
     /**
      `Guarantee<[T]>` => `T` -> Bool => `Guarantee<[T]>`
-
-         Guarantee.value([1,2,3])
-            .filterValues { $0 > 1 }
-            .done {
-                // $0 => [2,3]
-            }
+     
+     Guarantee.value([1,2,3])
+     .filterValues { $0 > 1 }
+     .done {
+     // $0 => [2,3]
+     }
      */
     func filterValues(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ isIncluded: @escaping(T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter(isIncluded)
         }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Guarantee<[T]>` => `KeyPath<T, Bool>` => `Guarantee<[T]>`
-
-         Guarantee.value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)])
-            .filterValues(\.isStudent)
-            .done {
-                // $0 => [Person(name: "John", age: 23, isStudent: true)]
-            }
+     
+     Guarantee.value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)])
+     .filterValues(\.isStudent)
+     .done {
+     // $0 => [Person(name: "John", age: 23, isStudent: true)]
+     }
      */
     func filterValues(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, Bool>) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter { $0[keyPath: keyPath] }
         }
     }
-    #endif
-
+#endif
+    
     /**
      `Guarantee<[T]>` => (`T`, `T`) -> Bool => `Guarantee<[T]>`
-
+     
      Guarantee.value([5,2,3,4,1])
-        .sortedValues { $0 > $1 }
-        .done {
-            // $0 => [5,4,3,2,1]
-        }
+     .sortedValues { $0 > $1 }
+     .done {
+     // $0 => [5,4,3,2,1]
+     }
      */
     func sortedValues(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ areInIncreasingOrder: @escaping(T.Iterator.Element, T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
@@ -328,12 +328,12 @@ public extension Guarantee where T: Sequence {
 public extension Guarantee where T: Sequence, T.Iterator.Element: Comparable {
     /**
      `Guarantee<[T]>` => `Guarantee<[T]>`
-
+     
      Guarantee.value([5,2,3,4,1])
-        .sortedValues()
-        .done {
-            // $0 => [1,2,3,4,5]
-        }
+     .sortedValues()
+     .done {
+     // $0 => [1,2,3,4,5]
+     }
      */
     func sortedValues(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) { $0.sorted() }
@@ -345,7 +345,7 @@ public extension Guarantee where T == Void {
     convenience init() {
         self.init(box: SealedBox(value: Void()))
     }
-
+    
     static var value: Guarantee<Void> {
         return .value(Void())
     }
@@ -356,13 +356,13 @@ public extension Guarantee where T == Void {
 public extension DispatchQueue {
     /**
      Asynchronously executes the provided closure on a dispatch queue.
-
-         DispatchQueue.global().async(.promise) {
-             md5(input)
-         }.done { md5 in
-             //…
-         }
-
+     
+     DispatchQueue.global().async(.promise) {
+     md5(input)
+     }.done { md5 in
+     //…
+     }
+     
      - Parameter body: The closure that resolves this promise.
      - Returns: A new `Guarantee` resolved by the result of the provided closure.
      - Note: There is no Promise/Thenable version of this due to Swift compiler ambiguity issues.

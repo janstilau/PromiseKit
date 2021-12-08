@@ -1,11 +1,12 @@
+
 /// An object for resolving promises
 public final class Resolver<T> {
     let box: Box<Result<T>>
-
+    
     init(_ box: Box<Result<T>>) {
         self.box = box
     }
-
+    
     deinit {
         if case .pending = box.inspect() {
             conf.logHandler(.pendingPromiseDeallocated)
@@ -14,21 +15,23 @@ public final class Resolver<T> {
 }
 
 public extension Resolver {
-    /// Fulfills the promise with the provided value
+    /*
+        所有的操作, 都是进行 Box 的状态改变. 
+     */
     func fulfill(_ value: T) {
         box.seal(.fulfilled(value))
     }
-
+    
     /// Rejects the promise with the provided error
     func reject(_ error: Error) {
         box.seal(.rejected(error))
     }
-
+    
     /// Resolves the promise with the provided result
     func resolve(_ result: Result<T>) {
         box.seal(result)
     }
-
+    
     /// Resolves the promise with the provided value or error
     func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
@@ -39,7 +42,7 @@ public extension Resolver {
             reject(PMKError.invalidCallingConvention)
         }
     }
-
+    
     /// Fulfills the promise with the provided value unless the provided error is non-nil
     func resolve(_ obj: T, _ error: Error?) {
         if let error = error {
@@ -48,7 +51,7 @@ public extension Resolver {
             fulfill(obj)
         }
     }
-
+    
     /// Resolves the promise, provided for non-conventional value-error ordered completion handlers.
     func resolve(_ error: Error?, _ obj: T?) {
         resolve(obj, error)
@@ -67,7 +70,7 @@ extension Resolver where T == Void {
     }
 #if false
     // disabled ∵ https://github.com/mxcl/PromiseKit/issues/990
-
+    
     /// Fulfills the promise
     public func fulfill() {
         self.fulfill(())
@@ -94,6 +97,11 @@ extension Resolver {
 }
 #endif
 
+/*
+    Resolved 状态下, 又分 fulfilled 和 rejected 两种.
+    在 Fulfilled 的状态下, 才会存储 T 类型的值.
+    在 Rejected 的状态下, 只会存储一个 Error.
+ */
 public enum Result<T> {
     case fulfilled(T)
     case rejected(Error)
