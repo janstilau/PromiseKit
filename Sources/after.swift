@@ -11,11 +11,7 @@ import Dispatch
 public func after(seconds: TimeInterval) -> Guarantee<Void> {
     let (rg, seal) = Guarantee<Void>.pending()
     let when = DispatchTime.now() + seconds
-#if swift(>=4.0)
     q.asyncAfter(deadline: when) { seal(()) }
-#else
-    q.asyncAfter(deadline: when, execute: seal)
-#endif
     return rg
 }
 

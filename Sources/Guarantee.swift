@@ -3,19 +3,22 @@ import Dispatch
 
 /*
  A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
- - See: `Thenable`
  */
 
 /*
     这个 Thenable, 不会产生错误, 一定会产生 T 类型的值.
+ 
+    Guarantee 里面, T 是业务数据类型, 而不是 Result 的类型.
+    所以, 它的 Resolved 状态, 里面存的就是 T 类型的值, 没有用 Result 在去包装一层.
  */
 public final class Guarantee<T>: Thenable {
-    /// Returns a `Guarantee` sealed with the provided value.
+    
     public static func value(_ value: T) -> Guarantee<T> {
         // .init 还能这样使用.
         return .init(box: SealedBox(value: value))
     }
     
+    // 状态值.
     let box: PromiseKit.Box<T>
     
     fileprivate init(box: SealedBox<T>) {
@@ -27,12 +30,14 @@ public final class Guarantee<T>: Thenable {
     /// Returns a pending `Guarantee` that can be resolved with the provided closure’s parameter.
     public init(resolver body: (@escaping(T) -> Void) -> Void) {
         box = Box()
+        // 这种写法, 会把 Box 进行捕获.
         body(box.seal)
     }
     
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
         pipe{
+            // 直接, 就是 Fulfilled 的状态. 没有 rejected 的状态.
             to(.fulfilled($0))
         }
     }
@@ -79,33 +84,45 @@ public final class Guarantee<T>: Thenable {
     }
     
     /// Returns a tuple of a pending `Guarantee` and a function that resolves it.
-    public class func pending() -> (guarantee: Guarantee<T>, resolve: (T) -> Void) {
-        return { ($0, $0.box.seal) }(Guarantee<T>(.pending))
+        // 垃圾写法
+    public class func pending() -> (guarantee: Guarantee<T>,
+                                    resolve: (T) -> Void) {
+        return {
+            ($0, $0.box.seal)
+        }(Guarantee<T>(.pending))
     }
 }
 
 public extension Guarantee {
     
     @discardableResult
-    func done(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Void) -> Guarantee<Void> {
+    func done(on: DispatchQueue? = conf.Q.return,
+              flags: DispatchWorkItemFlags? = nil,
+              _ body: @escaping(T) -> Void) -> Guarantee<Void> {
         let rg = Guarantee<Void>(.pending)
+        
         pipe { (value: T) in
             on.async(flags: flags) {
                 body(value)
                 rg.box.seal(())
             }
         }
+        
         return rg
     }
     
-    func get(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping (T) -> Void) -> Guarantee<T> {
+    func get(on: DispatchQueue? = conf.Q.return,
+             flags: DispatchWorkItemFlags? = nil,
+             _ body: @escaping (T) -> Void) -> Guarantee<T> {
         return map(on: on, flags: flags) {
             body($0)
             return $0
         }
     }
     
-    func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> U) -> Guarantee<U> {
+    func map<U>(on: DispatchQueue? = conf.Q.map,
+                flags: DispatchWorkItemFlags? = nil,
+                _ body: @escaping(T) -> U) -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
             on.async(flags: flags) {
@@ -128,7 +145,9 @@ public extension Guarantee {
 #endif
     
     @discardableResult
-    func then<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Guarantee<U>) -> Guarantee<U> {
+    func then<U>(on: DispatchQueue? = conf.Q.map,
+                 flags: DispatchWorkItemFlags? = nil,
+                 _ body: @escaping(T) -> Guarantee<U>) -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
             on.async(flags: flags) {
@@ -157,6 +176,7 @@ public extension Guarantee {
         if result == nil {
             let group = DispatchGroup()
             group.enter()
+            // 将, 回调进行注册, 别的线程的状态变化, 触发回调, 这里 wait 才可以继续向后进行.
             pipe { (foo: T) in result = foo; group.leave() }
             group.wait()
         }

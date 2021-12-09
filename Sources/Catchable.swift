@@ -27,6 +27,8 @@ public extension CatchMixin {
                 guard policy == .allErrors || !error.isCancelled else {
                     fallthrough
                 }
+                // 只会在 Rejected 的状态下, 才会触发 Body.
+                // 触发了之后, finalizer 内管理的状态, 也就固定下来了.
                 on.async(flags: flags) {
                     body(error)
                     finalizer.pending.resolve(())
@@ -45,8 +47,11 @@ public class PMKFinalizer {
     let pending = Guarantee<Void>.pending()
     
     /// `finally` is the same as `ensure`, but it is not chainable
-    public func finally(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) {
-        pending.guarantee.done(on: on, flags: flags) {
+    public func finally(on: DispatchQueue? = conf.Q.return,
+                        flags: DispatchWorkItemFlags? = nil,
+                        _ body: @escaping () -> Void) {
+        pending.guarantee.done(on: on,
+                               flags: flags) {
             body()
         }
     }
@@ -67,13 +72,13 @@ public extension CatchMixin {
      guard error == CLError.unknownLocation else { throw error }
      return .value(CLLocation.chicago)
      }
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter body: The handler to execute if this promise is rejected.
-     - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover<U: Thenable>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = conf.catchPolicy, _ body: @escaping(Error) throws -> U) -> Promise<T> where U.T == T {
+    func recover<U: Thenable>(on: DispatchQueue? = conf.Q.map,
+                              flags: DispatchWorkItemFlags? = nil,
+                              policy: CatchPolicy = conf.catchPolicy,
+                              _ body: @escaping(Error) throws -> U) -> Promise<T> where U.T == T {
         let rp = Promise<U.T>(.pending)
+        
         pipe {
             switch $0 {
             case .fulfilled(let value):
@@ -82,6 +87,7 @@ public extension CatchMixin {
                 if policy == .allErrors || !error.isCancelled {
                     on.async(flags: flags) {
                         do {
+                            // 如果, 发生了问题, 就使用 Body 开启一个新的异步任务. 有这个异步任务的状态, 来决定后续的状态.
                             let rv = try body(error)
                             guard rv !== rp else { throw PMKError.returnedSelf }
                             rv.pipe(to: rp.box.seal)
@@ -94,6 +100,7 @@ public extension CatchMixin {
                 }
             }
         }
+        
         return rp
     }
     
@@ -137,6 +144,10 @@ public extension CatchMixin {
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
+     */
+    /*
+        ensure, 就是不管结果如何, 都执行 Body 里面的操作.
+        然后, 将 Rp 的状态, 变为 Result 的值 .
      */
     func ensure(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
         let rp = Promise<T>(.pending)
