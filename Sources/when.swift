@@ -9,18 +9,15 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
     
     let rp = Promise<Void>(.pending)
     
-#if PMKDisableProgress || os(Linux)
-    var progress: (completedUnitCount: Int, totalUnitCount: Int) = (0, 0)
-#else
     let progress = Progress(totalUnitCount: Int64(thenables.count))
     progress.isCancellable = false
     progress.isPausable = false
-#endif
     
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
     
     for promise in thenables {
         promise.pipe { result in
+            // barrier.sync(flags: .barrier) 就注定了, 里面的 Block 一定是线程安全的. 
             barrier.sync(flags: .barrier) {
                 switch result {
                 case .rejected(let error):

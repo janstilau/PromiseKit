@@ -2,14 +2,14 @@ import class Foundation.Thread
 import Dispatch
 
 /*
- A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
+    A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  */
 
 /*
-    这个 Thenable, 不会产生错误, 一定会产生 T 类型的值.
+ 这个 Thenable, 不会产生错误, 一定会产生 T 类型的值.
  
-    Guarantee 里面, T 是业务数据类型, 而不是 Result 的类型.
-    所以, 它的 Resolved 状态, 里面存的就是 T 类型的值, 没有用 Result 在去包装一层.
+ Guarantee 里面, T 是业务数据类型, 而不是 Result 的类型.
+ 所以, 它的 Resolved 状态, 里面存的就是 T 类型的值, 没有用 Result 在去包装一层.
  */
 public final class Guarantee<T>: Thenable {
     
@@ -84,12 +84,10 @@ public final class Guarantee<T>: Thenable {
     }
     
     /// Returns a tuple of a pending `Guarantee` and a function that resolves it.
-        // 垃圾写法
+    // 垃圾写法
     public class func pending() -> (guarantee: Guarantee<T>,
                                     resolve: (T) -> Void) {
-        return {
-            ($0, $0.box.seal)
-        }(Guarantee<T>(.pending))
+        return { ($0, $0.box.seal) }(Guarantee<T>(.pending))
     }
 }
 
@@ -131,18 +129,6 @@ public extension Guarantee {
         }
         return rg
     }
-    
-#if swift(>=4) && !swift(>=5.2)
-    func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T, U>) -> Guarantee<U> {
-        let rg = Guarantee<U>(.pending)
-        pipe { value in
-            on.async(flags: flags) {
-                rg.box.seal(value[keyPath: keyPath])
-            }
-        }
-        return rg
-    }
-#endif
     
     @discardableResult
     func then<U>(on: DispatchQueue? = conf.Q.map,

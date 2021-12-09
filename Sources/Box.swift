@@ -1,8 +1,8 @@
 import Dispatch
 
 /*
-    Sealant 里面, 存储的会是 Result 类型.
-    Handler 里面, 存储的是 处理 Result 类型的闭包.
+ Sealant 里面, 存储的会是 Result 类型.
+ Handler 里面, 存储的是 处理 Result 类型的闭包.
  */
 enum Sealant<R> {
     // 如果是在 Pending 状态, 那么 value 部分, 存储的是一个个的 Handler
@@ -19,7 +19,7 @@ final class Handlers<R> {
 class Box<T> {
     func inspect() -> Sealant<T> { fatalError() }
     func inspect(_: (Sealant<T>) -> Void) { fatalError() } // 使用该方法, 一定要在 inspect() 返回 Pending 的前提下使用.
-    func seal(_: T) {} // Seal, 就是将状态, 改变为 Resolved 的状态. 
+    func seal(_: T) {} // Seal, 就是将状态, 改变为 Resolved 的状态.
 }
 
 // SealedBox, 是没有办法, 进行状态的改变的.
@@ -32,24 +32,19 @@ final class SealedBox<T>: Box<T> {
     }
     
     // 特殊的 Box, 状态不会发生任何改变, 一个不可变对象.
-    // 不用考虑线程问题. 
+    // 不用考虑线程问题.
     override func inspect() -> Sealant<T> {
         return .resolved(value)
     }
 }
 
 /*
-    虽然, 这里写的是 T, 但是其实是一个 Result 的类型.
+ 虽然, 这里写的是 T, 但是其实是一个 Result 的类型.
  */
 class EmptyBox<T>: Box<T> {
     
     private var sealant = Sealant<T>.pending(.init())
     
-    /*
-        使用, DispatchQueue 来解决线程问题的思路就是 .
-        如果是 Get 函数, 就是设置返回值, 将赋值操作, 用 sync 的执行 Block.
-        如果是 Set 函数, 
-     */
     private let barrier = DispatchQueue(label: "org.promisekit.barrier", attributes: .concurrent)
     
     // 当, Box 从 Pending 变为 Resolved 的时候, 要把所有的回调取出来调用一次, 并且清空回调 .
@@ -119,6 +114,7 @@ extension Optional where Wrapped: DispatchQueue {
                _ body: @escaping() -> Void) {
         switch self {
         case .none:
+            // 如果, 是 nil. 那就不调度, 直接当前的线程执行. 
             body()
         case .some(let q):
             if let flags = flags {

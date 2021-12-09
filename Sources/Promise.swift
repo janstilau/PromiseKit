@@ -2,8 +2,8 @@ import class Foundation.Thread
 import Dispatch
 
 /*
-    Promise, 仅仅绑定的是业务的 T 类型.
-    因为在 Box 里面, 自动绑定了 Result.
+ Promise, 仅仅绑定的是业务的 T 类型.
+ 因为在 Box 里面, 自动绑定了 Result.
  */
 public final class Promise<T>: Thenable, CatchMixin {
     
@@ -44,7 +44,7 @@ public final class Promise<T>: Thenable, CatchMixin {
     }
     
     /*
-        使用, 一个 Error 进行初始化, 就是将状态, 变为 Resolved, 里面的 Result 是 Rejected.
+     使用, 一个 Error 进行初始化, 就是将状态, 变为 Resolved, 里面的 Result 是 Rejected.
      */
     public init(error: Error) {
         box = SealedBox(value: .rejected(error))
@@ -61,13 +61,13 @@ public final class Promise<T>: Thenable, CatchMixin {
     // Resolver, 里面包装的就是 resolve, reject 函数.
     
     /*
-        新生成的 Promise, 它的 Box 的状态改变, 只能通过 Resolver 来进行.
-        Body 闭包, 应该在适当的时机, 来调用 Resolver 的方法, 来使得 Promise 的状态发生改变. 
+     新生成的 Promise, 它的 Box 的状态改变, 只能通过 Resolver 来进行.
+     Body 闭包, 应该在适当的时机, 来调用 Resolver 的方法, 来使得 Promise 的状态发生改变.
      */
     public init(resolver body: (Resolver<T>) throws -> Void) {
         box = EmptyBox()
         
-        let resolver = Resolver(box) // 生成, 可以改变 Primise 的一个对象. 
+        let resolver = Resolver(box) // 生成, 可以改变 Primise 的一个对象.
         do {
             try body(resolver)
         } catch {
@@ -75,14 +75,15 @@ public final class Promise<T>: Thenable, CatchMixin {
         }
     }
     
-    /// - Returns: a tuple of a new pending promise and its `Resolver`.
+    // 这个 Pending 的写法, 是类库里面的, 固定的命名规则.
     public class func pending() -> (promise: Promise<T>, resolver: Resolver<T>) {
         return { ($0, Resolver($0.box)) }(Promise<T>(.pending))
     }
     
     // 如果, 是 Pending 态, 那么就讲 Handler 进行存储.
-    // 这里有一些多线程的判断, 不在意.
+    
     public func pipe(to: @escaping(Result<T>) -> Void) {
+        // box.inspect() get 操作, 里面有线程控制.
         switch box.inspect() {
         case .pending:
             box.inspect {

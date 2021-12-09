@@ -19,6 +19,7 @@ public extension CatchMixin {
                  policy: CatchPolicy = conf.catchPolicy,
                  _ body: @escaping(Error) -> Void) -> PMKFinalizer {
         
+        // 返回了一个特殊的类型, 这个特殊类型, 只能调用 finnally
         let finalizer = PMKFinalizer()
         
         pipe {
@@ -42,6 +43,7 @@ public extension CatchMixin {
     }
 }
 
+// 这是一个新的类型, 只能调用 finnally 函数了.
 public class PMKFinalizer {
     
     let pending = Guarantee<Void>.pending()

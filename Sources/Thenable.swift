@@ -9,11 +9,10 @@ import Dispatch
  */
 
 public protocol Thenable: AnyObject {
-    /// The type of the wrapped value
+    
     // T 代表的是, 这个异步操作的返回值. 是使用者最为关心的业务类型.
     associatedtype T
     
-    /// `pipe` is immediately executed when this `Thenable` is resolved
     /*
      这是最原始, 添加闭包回调的方式, 并不要求返回一个 Promise 回来.
      但是, 它的处理的值, 是一个 Result 的值, 而不是一个业务的 T 的值.
@@ -34,27 +33,27 @@ public protocol Thenable: AnyObject {
     var result: Result<T>? { get }
 }
 
+
+/*
+    前面, 定义了抽象的方法.
+    后面, 就可以在抽象的方法的基础上, 定义复杂的功能方法了.
+ 
+    下面, 各种操作, 都是建立在, 可以添加后续操作的这一最最基本的操作之上的. 
+ */
 public extension Thenable {
     /*
      The provided closure executes when this promise is fulfilled. // 只用传递成功的值.
      
      This allows chaining promises. The promise returned by the provided closure is resolved before the promise returned by this closure resolves. // Body 生成的 Promise, 状态改变, 触发返回的 Promise 的状态改变.
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter body: The closure that executes when this promise is fulfilled. It must return a promise.
-     - Returns: A new promise that resolves when the promise returned from the provided closure resolves. For      */
-    /*
-     Swift 版本的 Then, 只是传递了 Fulfilled 状态下的处理回调.
-     而 Rejected 状态下的回调, 是默认进行处理了.
      */
     /*
-     和 JS 的 Then 不同, 这里的 Then, 传递的仅仅是 Fulfilled 状态下, 应该触发的异步操作.
-     因为, 在 Then 的内部, 自动处理了其他情况.
+        和 JS 的 Then 不同, 这里的 Then, 传递的仅仅是 Fulfilled 状态下, 应该触发的异步操作.
+        因为, 在 Then 的内部, 自动处理了其他情况.
      */
+    // Then 只处理, Fulfilled 状态下的响应, 和 JS 不同, Then 必须是返回一个 Promise, 也就是开启一个异步任务.
     func then<U: Thenable>(on: DispatchQueue? = conf.Q.map,
                            flags: DispatchWorkItemFlags? = nil,
                            _ body: @escaping(T) throws -> U) -> Promise<U.T> {
-        
         // RP
         let rp = Promise<U.T>(.pending)
         
@@ -97,19 +96,17 @@ public extension Thenable {
     }
     
     /*
-     The provided closure is executed when this promise is fulfilled.
-     
-     This is like `then` but it requires the closure to return a non-promise.
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter transform: The closure that is executed when this Promise is fulfilled. It must return a non-promise.
-     - Returns: A new promise that is fulfilled with the value returned from the provided closure or rejected if the provided closure throws. For example:
-     }
+        The provided closure is executed when this promise is fulfilled.
+        This is like `then` but it requires the closure to return a non-promise.
      */
-    // Map 中, Body 不再是返回一个 Promise, 而是根据上一个异步操作的结果生成一个新的值.
-    // 而这个新生成的值, 会是 Rp 的结果, 然后传递到 RP 的 Handler 里面去.
     /*
-        这在 RXSwift 里面, 也是经常使用的一个方法. Map 的含义就是映射, 添加这样的一个中间步骤, 并不添加任何的异步操作, 仅仅是值的变化. 
+        Map 中, Body 不再是返回一个 Promise, 而是根据上一个异步操作的结果生成一个新的值.
+        而这个新生成的值, 会是 Rp 的结果, 然后传递到 RP 的 Handler 里面去.
+        这在 RXSwift 里面, 也是经常使用的一个方法. Map 的含义就是映射, 添加这样的一个中间步骤, 并不添加任何的异步操作, 仅仅是值的变化.
+     */
+    /*
+        使用 Promise, 一定要有一个概念, 就是所有的回调, 并不是同步执行的.
+        它仅仅是触发. 而触发到哪个线程, 是否是同步的, 不重要.
      */
     func map<U>(on: DispatchQueue? = conf.Q.map,
                 flags: DispatchWorkItemFlags? = nil,
@@ -190,10 +187,11 @@ public extension Thenable {
      }
      */
     func done(on: DispatchQueue? = conf.Q.return,
-              flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) throws -> Void) -> Promise<Void> {
+              flags: DispatchWorkItemFlags? = nil,
+              _ body: @escaping(T) throws -> Void) -> Promise<Void> {
         
         // 固定下来了, Result 的类型.
-        // 就是使用, 上一个 Promise 的值, 做一个动作. 不同将值在继续往后传递了.
+        // 就是使用, 上一个 Promise 的值, 做一个动作. 不会将这个值, 向后传递了.
         let rp = Promise<Void>(.pending)
         
         pipe {
@@ -212,20 +210,16 @@ public extension Thenable {
             }
         }
         
+        // 这还是, 返回一个 Promise. 所以后面还是可以加 Catch 的.
+        // 只不过, RP 如果在 Fulfilled 的情况下, Result 是 Void 的了. 失去了数据队列的意义了.
         return rp
     }
     
     /*
-     The provided closure is executed when this promise is fulfilled.
-     
-     This is like `done` but it returns the same value that the handler is fed.
-     `get` immutably accesses the fulfilled value; the returned Promise maintains that value.
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter body: The closure that is executed when this Promise is fulfilled.
-     - Returns: A new promise that is fulfilled with the value that the handler is fed or rejected if the provided closure throws. For example:
+        The provided closure is executed when this promise is fulfilled.
+        This is like `done` but it returns the same value that the handler is fed.
+        `get` immutably accesses the fulfilled value; the returned Promise maintains that value.
      */
-    
     /*
         以上, 所有的方法, 都是在 Fulfilled 的状态下, 做的操作.
         在 Reject 状态下, 只是做 Error 的传递.
