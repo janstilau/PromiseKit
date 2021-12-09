@@ -1,8 +1,12 @@
 import class Foundation.Thread
 import Dispatch
 
-
+/*
+    Promise, 仅仅绑定的是业务的 T 类型.
+    因为在 Box 里面, 自动绑定了 Result.
+ */
 public final class Promise<T>: Thenable, CatchMixin {
+    
     let box: Box<Result<T>>
     
     fileprivate init(box: SealedBox<Result<T>>) {
@@ -39,7 +43,9 @@ public final class Promise<T>: Thenable, CatchMixin {
         return Promise(box: SealedBox(value: .fulfilled(value)))
     }
     
-    /// Initialize a new rejected promise.
+    /*
+        使用, 一个 Error 进行初始化, 就是将状态, 变为 Resolved, 里面的 Result 是 Rejected.
+     */
     public init(error: Error) {
         box = SealedBox(value: .rejected(error))
     }
@@ -53,10 +59,15 @@ public final class Promise<T>: Thenable, CatchMixin {
     /// Initialize a new promise that can be resolved with the provided `Resolver`.
     // 可以类似于, JS 里面的 executor 的用法.
     // Resolver, 里面包装的就是 resolve, reject 函数.
+    
+    /*
+        新生成的 Promise, 它的 Box 的状态改变, 只能通过 Resolver 来进行.
+        Body 闭包, 应该在适当的时机, 来调用 Resolver 的方法, 来使得 Promise 的状态发生改变. 
+     */
     public init(resolver body: (Resolver<T>) throws -> Void) {
         box = EmptyBox()
         
-        let resolver = Resolver(box)
+        let resolver = Resolver(box) // 生成, 可以改变 Primise 的一个对象. 
         do {
             try body(resolver)
         } catch {

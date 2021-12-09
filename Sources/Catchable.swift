@@ -1,8 +1,7 @@
 import Dispatch
 
 /// Provides `catch` and `recover` to your object that conforms to `Thenable`
-public protocol CatchMixin: Thenable
-{}
+public protocol CatchMixin: Thenable {}
 
 public extension CatchMixin {
     
@@ -13,16 +12,15 @@ public extension CatchMixin {
      recover is invoked) thus you will typically place your catch at the end
      of a chain. Often utility promises will not have a catch, instead
      delegating the error handling to the caller.
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter policy: The default policy does not execute your handler for cancellation errors.
-     - Parameter execute: The handler to execute if this promise is rejected.
-     - Returns: A promise finalizer.
-     - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
     @discardableResult
-    func `catch`(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = conf.catchPolicy, _ body: @escaping(Error) -> Void) -> PMKFinalizer {
+    func `catch`(on: DispatchQueue? = conf.Q.return,
+                 flags: DispatchWorkItemFlags? = nil,
+                 policy: CatchPolicy = conf.catchPolicy,
+                 _ body: @escaping(Error) -> Void) -> PMKFinalizer {
+        
         let finalizer = PMKFinalizer()
+        
         pipe {
             switch $0 {
             case .rejected(let error):
@@ -37,13 +35,15 @@ public extension CatchMixin {
                 finalizer.pending.resolve(())
             }
         }
+        
         return finalizer
     }
 }
 
 public class PMKFinalizer {
+    
     let pending = Guarantee<Void>.pending()
-
+    
     /// `finally` is the same as `ensure`, but it is not chainable
     public func finally(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) {
         pending.guarantee.done(on: on, flags: flags) {
@@ -60,13 +60,13 @@ public extension CatchMixin {
      
      Unlike `catch`, `recover` continues the chain.
      Use `recover` in circumstances where recovering the chain from certain errors is a possibility. For example:
-
-         firstly {
-             CLLocationManager.requestLocation()
-         }.recover { error in
-             guard error == CLError.unknownLocation else { throw error }
-             return .value(CLLocation.chicago)
-         }
+     
+     firstly {
+     CLLocationManager.requestLocation()
+     }.recover { error in
+     guard error == CLError.unknownLocation else { throw error }
+     return .value(CLLocation.chicago)
+     }
      
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The handler to execute if this promise is rejected.
@@ -96,7 +96,7 @@ public extension CatchMixin {
         }
         return rp
     }
-
+    
     /**
      The provided closure executes when this promise rejects.
      This variant of `recover` requires the handler to return a Guarantee, thus it returns a Guarantee itself and your closure cannot `throw`.
@@ -120,19 +120,19 @@ public extension CatchMixin {
         }
         return rg
     }
-
+    
     /**
      The provided closure executes when this promise resolves, whether it rejects or not.
      
-         firstly {
-             UIApplication.shared.networkActivityIndicatorVisible = true
-         }.done {
-             //…
-         }.ensure {
-             UIApplication.shared.networkActivityIndicatorVisible = false
-         }.catch {
-             //…
-         }
+     firstly {
+     UIApplication.shared.networkActivityIndicatorVisible = true
+     }.done {
+     //…
+     }.ensure {
+     UIApplication.shared.networkActivityIndicatorVisible = false
+     }.catch {
+     //…
+     }
      
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that executes when this promise resolves.
@@ -148,21 +148,21 @@ public extension CatchMixin {
         }
         return rp
     }
-
+    
     /**
      The provided closure executes when this promise resolves, whether it rejects or not.
      The chain waits on the returned `Guarantee<Void>`.
-
-         firstly {
-             setup()
-         }.done {
-             //…
-         }.ensureThen {
-             teardown()  // -> Guarante<Void>
-         }.catch {
-             //…
-         }
-
+     
+     firstly {
+     setup()
+     }.done {
+     //…
+     }.ensureThen {
+     teardown()  // -> Guarante<Void>
+     }.catch {
+     //…
+     }
+     
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
@@ -178,9 +178,9 @@ public extension CatchMixin {
         }
         return rp
     }
-
-
-
+    
+    
+    
     /**
      Consumes the Swift unused-result warning.
      - Note: You should `catch`, but in situations where you know you don’t need a `catch`, `cauterize` makes your intentions clear.
@@ -221,7 +221,7 @@ public extension CatchMixin where T == Void {
         }
         return rg
     }
-
+    
     /**
      The provided closure executes when this promise rejects.
      

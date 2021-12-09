@@ -1,7 +1,8 @@
 import Dispatch
 
 /*
-    这里, 对于类的设计过于复杂了.
+    Sealant 里面, 存储的会是 Result 类型.
+    Handler 里面, 存储的是 处理 Result 类型的闭包.
  */
 enum Sealant<R> {
     // 如果是在 Pending 状态, 那么 value 部分, 存储的是一个个的 Handler
@@ -17,10 +18,12 @@ final class Handlers<R> {
 
 class Box<T> {
     func inspect() -> Sealant<T> { fatalError() }
-    func inspect(_: (Sealant<T>) -> Void) { fatalError() }
-    func seal(_: T) {}
+    func inspect(_: (Sealant<T>) -> Void) { fatalError() } // 使用该方法, 一定要在 inspect() 返回 Pending 的前提下使用.
+    func seal(_: T) {} // Seal, 就是将状态, 改变为 Resolved 的状态. 
 }
 
+// SealedBox, 是没有办法, 进行状态的改变的.
+// 对他进行 Inspect, 只会是 Resolved 的状态.
 final class SealedBox<T>: Box<T> {
     let value: T
     
@@ -35,6 +38,9 @@ final class SealedBox<T>: Box<T> {
     }
 }
 
+/*
+    虽然, 这里写的是 T, 但是其实是一个 Result 的类型.
+ */
 class EmptyBox<T>: Box<T> {
     
     private var sealant = Sealant<T>.pending(.init())
@@ -50,15 +56,20 @@ class EmptyBox<T>: Box<T> {
     // 然后, 将自己的状态, 变为是 .resolved 的状态.
     
     // 因为, 这是一个可变类型, 所以要考虑线程问题.
+    // 实际, 在 Resolver 里面, seal 的参数, 会是一个 Result 类型的对象.
     override func seal(_ value: T) {
+        
         var handlers: Handlers<T>!
         barrier.sync(flags: .barrier) {
             guard case .pending(let _handlers) = self.sealant else {
                 return
             }
             handlers = _handlers
+            // 在这里, 完成了 Sealant 的状态切换.
+            // 之前存储的 Handlers 在这个时候, 会全部进行是释放.
             self.sealant = .resolved(value)
         }
+        
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }
@@ -104,7 +115,8 @@ class EmptyBox<T>: Box<T> {
 
 extension Optional where Wrapped: DispatchQueue {
     @inline(__always)
-    func async(flags: DispatchWorkItemFlags?, _ body: @escaping() -> Void) {
+    func async(flags: DispatchWorkItemFlags?,
+               _ body: @escaping() -> Void) {
         switch self {
         case .none:
             body()

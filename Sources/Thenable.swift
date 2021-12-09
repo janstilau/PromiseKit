@@ -1,23 +1,36 @@
 import Dispatch
 
 /*
-    异步任务的抽象.
-    这个异步任务, 可以添加后续操作. 而这个后续操作, 是对结果进行 Check 的基础上进行的. 要判断, 是 Fulfilled, 还是 Rejected.
-    这在 JS 里面, 是分为了两个函数了. onResolved 和 onRjected. 
-    可以查看当前的状态.
+ 异步任务的抽象.
+ 1.   这个异步任务, 可以添加后续操作. 而这个后续操作, 是对结果进行 Check 的基础上进行的.
+ 要判断, 是 Fulfilled, 还是 Rejected.
+ 这在 JS 里面, 是 Then 里面, 添加两个函数. onResolved, onRejected 两个函数.
+ 2.  可以查看当前的状态.
  */
-/// Thenable represents an asynchronous operation that can be chained.
+
 public protocol Thenable: AnyObject {
     /// The type of the wrapped value
     // T 代表的是, 这个异步操作的返回值. 是使用者最为关心的业务类型.
     associatedtype T
     
     /// `pipe` is immediately executed when this `Thenable` is resolved
-    // Pipe 里面, 存储的是, 当一个 Promise 变为 Resolved 的状态之后, 应该执行的回调.
+    /*
+     这是最原始, 添加闭包回调的方式, 并不要求返回一个 Promise 回来.
+     但是, 它的处理的值, 是一个 Result 的值, 而不是一个业务的 T 的值.
+     所以, pipe 后的逻辑, 是根据当前 Promise 的 Resolved 的 Fulfilled 和 Rejected 两种状态值, 进行不同的操作.
+     */
+    
+    /*
+     这是一个, 自由度非常非常大的函数.
+     各种操作, 基本上是通过, 自定义回调函数的方式实现的.
+     Pipe 的操作, 是判断状态, 存储回调函数的机制 .
+     而回调函数的不同, 导致了后面不同的操作.
+     */
     func pipe(to: @escaping(Result<T>) -> Void)
     
     /// The resolved result or nil if pending.
-    // 给与使用者, 一个权利去查看一下当前的 Result. 如果还是在 Pending, 那就是 Nil. 否则, 就是 Result<T>. 可能是 Fulfilled, 也可能是 Rejected
+    // 给与使用者, 一个权利去查看一下当前的 Result. 如果还是在 Pending, 那就是 Nil.
+    // 如果, 是 Resolved 的, 那么返回的是一个 Result.
     var result: Result<T>? { get }
 }
 
@@ -31,32 +44,40 @@ public extension Thenable {
      - Parameter body: The closure that executes when this promise is fulfilled. It must return a promise.
      - Returns: A new promise that resolves when the promise returned from the provided closure resolves. For      */
     /*
-        Swift 版本的 Then, 只是传递了 Fulfilled 状态下的处理回调.
-        而 Rejected 状态下的回调, 是默认进行处理了.
+     Swift 版本的 Then, 只是传递了 Fulfilled 状态下的处理回调.
+     而 Rejected 状态下的回调, 是默认进行处理了.
+     */
+    /*
+     和 JS 的 Then 不同, 这里的 Then, 传递的仅仅是 Fulfilled 状态下, 应该触发的异步操作.
+     因为, 在 Then 的内部, 自动处理了其他情况.
      */
     func then<U: Thenable>(on: DispatchQueue? = conf.Q.map,
                            flags: DispatchWorkItemFlags? = nil,
                            _ body: @escaping(T) throws -> U) -> Promise<U.T> {
-            
-        // RP 
+        
+        // RP
         let rp = Promise<U.T>(.pending)
         
         /*
-            Pipe 里面, 传递的是, 当异步任务变为 Resolved 之后的后续操作.
-            then 方法, 只传递了 Fulfilled 的后续操作. 所以, 是 then 方法内部, 添加了 Rejcted 状态的后续操作.
-            那就是, 将 RP 变为 Rejected.
+         Pipe 里面, 是 Pending -> Resoled 状态时, 应该触发的操作.
+         而 Resolved 下, 是一个 Result, Result 会有两种状态.
+         then 方法, 只传递了 Fulfilled 的后续操作. 在 then 方法内部, 添加了默认的 Rejected 状态下的处理方法.
+         那就是, 将 RP 变为 Rejected.
          */
         pipe {
             switch $0 {
             case .fulfilled(let value):
                 // 如果, 是 fulfilled 态, 那么就开启一个新的任务.
                 // 在这个新的任务上, 使用 Body 创建一个新的 Promise.
-                // 并且, 将新创建 Promise 的后续, 和 Rp 的值的改变, 绑定在了一起.
-                // 这样, RV 的状态, 才直接决定了 Rp 的状态.
+                // 新创建的 Promise 的回调, 是改变 Return 的 RP 的状态.
+                // 这样, RV 的状态变化, 就可以触发 RP 添加的各种回调了.
                 on.async(flags: flags) {
+                    // 这种, 异步触发的方式, 是和 JS 一致的.
+                    // 如果, Body 的调用过程中, 触发了异常, RP 直接变为 Rejected 的状态. 
                     do {
                         let rv = try body(value)
                         guard rv !== rp else { throw PMKError.returnedSelf }
+                        // RV 的状态变化的回调, 是触发 RP 的状态变化.
                         rv.pipe(to: rp.box.seal)
                     } catch {
                         rp.box.seal(.rejected(error))
@@ -64,7 +85,8 @@ public extension Thenable {
                 }
             case .rejected(let error):
                 // 如果, 是 Rejected, 直接就把 rp 的值, 改变为 rejected 了.
-                // Body 根本就不会调用. 
+                // Body 根本就不会调用.
+                // 这个 Error 完全不会进行修改, 从第一个出错的 Promise 的地方, 无任何修改的, 传递到了后面.
                 rp.box.seal(.rejected(error))
             }
         }
@@ -86,7 +108,9 @@ public extension Thenable {
      */
     // Map 中, Body 不再是返回一个 Promise, 而是根据上一个异步操作的结果生成一个新的值.
     // 而这个新生成的值, 会是 Rp 的结果, 然后传递到 RP 的 Handler 里面去.
-    // 这是一个经常会使用的函数, 因为, 并不是中间每一个步骤, 都要开启一个异步任务的.
+    /*
+        这在 RXSwift 里面, 也是经常使用的一个方法. Map 的含义就是映射, 添加这样的一个中间步骤, 并不添加任何的异步操作, 仅仅是值的变化. 
+     */
     func map<U>(on: DispatchQueue? = conf.Q.map,
                 flags: DispatchWorkItemFlags? = nil,
                 _ transform: @escaping(T) throws -> U) -> Promise<U> {
@@ -135,6 +159,8 @@ public extension Thenable {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
+                        // 如果, Transform 能够返回值, 就讲 Rp 的值, 变为返回的 U 类型的值.
+                        // 不然, 就讲 Rp 的值, 变为 Rejected. PMKError.compactMap(value, U.self)
                         if let rv = try transform(value) {
                             rp.box.seal(.fulfilled(rv))
                         } else {
@@ -165,7 +191,9 @@ public extension Thenable {
      */
     func done(on: DispatchQueue? = conf.Q.return,
               flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) throws -> Void) -> Promise<Void> {
+        
         // 固定下来了, Result 的类型.
+        // 就是使用, 上一个 Promise 的值, 做一个动作. 不同将值在继续往后传递了.
         let rp = Promise<Void>(.pending)
         
         pipe {
@@ -199,11 +227,10 @@ public extension Thenable {
      */
     
     /*
-        这里, 有点函数式编程的味道.
-        所有的, 都是建立在 Pipe 的基础上, Pipe, 是给 Primise 变为 RESOLVED 态度添加回调.
-        Map, 是在 fulfilled 的基础上, 增加对于 Result 的处理.
-        而, get, 则是利用了 map. 返回的还是原始值, 仅仅在其中, 增加了一个自定义的执行的闭包.
-        这里其实还是符合 Map 的定义, T->T, 只不过, 这里是 identify 的 Map.
+        以上, 所有的方法, 都是在 Fulfilled 的状态下, 做的操作.
+        在 Reject 状态下, 只是做 Error 的传递.
+     
+        这里, 利用了 Map 的处理机制. 在获取到上一个 Promise 的值后, 做了一件事情, 然后这个值, 原封不动的, 继续向后传递.
      */
     func get(on: DispatchQueue? = conf.Q.return,
              flags: DispatchWorkItemFlags? = nil,
@@ -230,9 +257,26 @@ public extension Thenable {
              flags: DispatchWorkItemFlags? = nil,
              _ body: @escaping(Result<T>) -> Void) -> Promise<T> {
         /*
-            新生成的 Promise 的 Executor 就是, 在当前的 Promise 上, 增加一个 Handler.
-            执行 Body 函数, 然后, 根据当前 Promise 的状态, 来决定新生成的 Primose 的状态.
+            Get 是拿到上一个 Promise 的 Fulfill 的值之后, 进行操作.
+            Tap 是拿到上一个 Primise 的 Result 的值之后, 进行操作.
+         
+            新生成一个 Promise, 它的值, 知道当前的 Promise 得到结果之后, 才会决定.
+            这种, 通过传递一个 executor 来生成 Promise 的操作, 和 JS 里面就非常像了. 
          */
+        
+//
+//        let rp = Promise<T>(.pending)
+//
+//        pipe { result in
+//            on.async(flags: flags) {
+//                body(result)
+//                rp.box.seal(result)
+//            }
+//        }
+//
+//        return rp
+        
+        // 应该, 用上面的写法, 也能实现效果.
         return Promise { seal in
             pipe { result in
                 on.async(flags: flags) {
@@ -250,7 +294,7 @@ public extension Thenable {
 }
 
 public extension Thenable {
-    /**
+    /*
      - Returns: The error with which this promise was rejected; `nil` if this promise is not rejected.
      */
     var error: Error? {

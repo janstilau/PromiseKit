@@ -5,16 +5,23 @@ import Dispatch
  A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  - See: `Thenable`
  */
+
+/*
+    这个 Thenable, 不会产生错误, 一定会产生 T 类型的值.
+ */
 public final class Guarantee<T>: Thenable {
+    /// Returns a `Guarantee` sealed with the provided value.
+    public static func value(_ value: T) -> Guarantee<T> {
+        // .init 还能这样使用.
+        return .init(box: SealedBox(value: value))
+    }
+    
     let box: PromiseKit.Box<T>
     
     fileprivate init(box: SealedBox<T>) {
+        // 使用了 Sealed 状态的 Box.
+        // 也就是上来就是 Resolved 状态的 Box.
         self.box = box
-    }
-    
-    /// Returns a `Guarantee` sealed with the provided value.
-    public static func value(_ value: T) -> Guarantee<T> {
-        return .init(box: SealedBox(value: value))
     }
     
     /// Returns a pending `Guarantee` that can be resolved with the provided closure’s parameter.
@@ -25,7 +32,9 @@ public final class Guarantee<T>: Thenable {
     
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
-        pipe{ to(.fulfilled($0)) }
+        pipe{
+            to(.fulfilled($0))
+        }
     }
     
     func pipe(to: @escaping(T) -> Void) {
@@ -76,6 +85,7 @@ public final class Guarantee<T>: Thenable {
 }
 
 public extension Guarantee {
+    
     @discardableResult
     func done(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Void) -> Guarantee<Void> {
         let rg = Guarantee<Void>(.pending)
