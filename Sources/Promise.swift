@@ -7,20 +7,21 @@ import Dispatch
  */
 public final class Promise<T>: Thenable, CatchMixin {
     
+    public static func value(_ value: T) -> Promise<T> {
+        return Promise(box: SealedBox(value: .fulfilled(value)))
+    }
+    
     let box: Box<Result<T>>
     
     fileprivate init(box: SealedBox<Result<T>>) {
         self.box = box
     }
     
-    public static func value(_ value: T) -> Promise<T> {
-        return Promise(box: SealedBox(value: .fulfilled(value)))
-    }
-    
     public init(error: Error) {
         box = SealedBox(value: .rejected(error))
     }
     
+    // 自己的状态, 交给另外的一个异步任务来决定. 
     public init<U: Thenable>(_ bridge: U) where U.T == T {
         box = EmptyBox()
         bridge.pipe(to: box.seal)
@@ -83,7 +84,7 @@ public final class Promise<T>: Thenable, CatchMixin {
 }
 
 public extension Promise {
-    /**
+    /*
      Blocks this thread, so—you know—don’t call this on a serial thread that
      any part of your chain may use. Like the main thread for example.
      */

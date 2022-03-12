@@ -24,6 +24,8 @@ public extension CatchMixin {
                  _ body: @escaping(Error) -> Void) -> PMKFinalizer {
         
         // 返回了一个特殊的类型, 这个特殊类型, 只能调用 finnally
+        //
+        // 最终返回的是 finalizer
         let finalizer = PMKFinalizer()
         
         pipe {
@@ -35,13 +37,12 @@ public extension CatchMixin {
                 // 只会在 Rejected 的状态下, 才会触发 Body.
                 // 触发了之后, finalizer 内管理的状态, 也就固定下来了.
                 on.async(flags: flags) {
-                    // body 不会直接影响到 finalizer
-                    // 仅仅是进行调用.
                     body(error)
+                    // 在 Body 调用之后, 调用 finalizer 的状态改变.
                     finalizer.pending.resolve(())
                 }
             case .fulfilled:
-                // 之前的响应链没有错误.
+                // 没有错误, 触发 finalizer 的状态改变.
                 finalizer.pending.resolve(())
             }
         }
@@ -123,14 +124,17 @@ public extension CatchMixin {
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
     @discardableResult
+    // 这个版本的 Body, 返回一个 Guarantee. 所以, 还是根据使用者, 来调用不同的同名函数.
     func recover(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(Error) -> Guarantee<T>) -> Guarantee<T> {
         let rg = Guarantee<T>(.pending)
         pipe {
             switch $0 {
             case .fulfilled(let value):
+                // 如果上游没有产生错误, 直接使用上游的数据.
                 rg.box.seal(value)
             case .rejected(let error):
                 on.async(flags: flags) {
+                    // 如果上游产生了错误, 使用 body 创建出 guarantee 对象, 然后这个对象, 决定当前节点的状态.
                     body(error).pipe(to: rg.box.seal)
                 }
             }
@@ -163,7 +167,7 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
-                // 和 Get 没有太大的区别感觉. 只是 body 不需要上游节点的状态值.
+                // 这种不需要判断状态的, 只能是写到 pipe 函数内.
                 body()
                 rp.box.seal(result)
             }
@@ -193,9 +197,8 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
-                // body 调用完毕只有, 继续触发 rp 的逻辑.
-                // 这里的 Body 是一个异步操作, 返回一个中间节点, 这个中间节点改变之后, 才会进行后续的操作.
-                // 后续节点, 还是使用 body 之前的数据, Body 完全是一个中间插入的节点.
+                // ensureThen 相比较于 ensure, 确保了 body 生成的异步任务完成之后, 才会触发当前节点状态的修改.
+                // 当前节点还是使用上游节点的数据, Body 没有对于数据的副作用.
                 body().done {
                     rp.box.seal(result)
                 }

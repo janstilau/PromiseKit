@@ -1,12 +1,14 @@
 import Dispatch
 
-/**
+/*
  PromiseKit’s configurable parameters.
 
  Do not change these after any Promise machinery executes as the configuration object is not thread-safe.
 
  We would like it to be, but sadly `Swift` does not expose `dispatch_once` et al. which is what we used to use in order to make the configuration immutable once first used.
 */
+
+// PromiseKit 里面, 对于 schedule 这个概念, 设计的非常简单. 
 public struct PMKConfiguration {
     /// The default queues that promises handlers dispatch to
     public var Q: (map: DispatchQueue?, return: DispatchQueue?) = (map: DispatchQueue.main, return: DispatchQueue.main)

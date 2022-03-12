@@ -46,7 +46,7 @@ public final class Guarantee<T>: Thenable {
         body(box.seal)
     }
     
-    /// - See: `Thenable.pipe`
+    // 对于 Thenable 接口的实现, 固定是 fulfilled 类型.
     public func pipe(to: @escaping(Result<T>) -> Void) {
         pipe {
             to(.fulfilled($0))
@@ -265,7 +265,7 @@ public extension Guarantee {
      */
     /*
      Thenable 里面, 会有 then 方法, 在这里面, 也会有 then 方法.
-     根据 body 的返回值, 其实会调用不同的方法的. 
+     根据 body 的返回值, 其实会调用不同的方法的.
      */
     @discardableResult
     func then<U>(on: DispatchQueue? = conf.Q.map,

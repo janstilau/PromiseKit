@@ -31,6 +31,8 @@ public extension Resolver {
         box.seal(result)
     }
     
+    
+    // 下面的几个方法, 主要是方便直接传递给 Cocoa 的各种 Api 中.
     /// Resolves the promise with the provided value or error
     func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
