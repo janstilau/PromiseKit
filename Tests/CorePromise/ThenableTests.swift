@@ -6,7 +6,7 @@ struct Person: Equatable {
     let name: String
     let age: Int?
     let isStudent: Bool
-
+    
     init(
         name: String = "",
         age: Int? = nil,
@@ -31,7 +31,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex1, ex2], timeout: 10)
     }
-
+    
     func testMap() {
         let ex = expectation(description: "")
         Promise.value(1).map {
@@ -42,7 +42,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testMapByKeyPath() {
         let ex = expectation(description: "")
         Promise.value(Person(name: "Max")).map(\.name).done {
@@ -51,7 +51,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testCompactMap() {
         let ex = expectation(description: "")
         Promise.value(1.0).compactMap {
@@ -62,11 +62,11 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testCompactMapThrows() {
-
+        
         enum E: Error { case dummy }
-
+        
         let ex = expectation(description: "")
         Promise.value("a").compactMap { x -> Int in
             throw E.dummy
@@ -78,11 +78,11 @@ class ThenableTests: XCTestCase {
         }
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testRejectedPromiseCompactMap() {
-
+        
         enum E: Error { case dummy }
-
+        
         let ex = expectation(description: "")
         Promise(error: E.dummy).compactMap {
             Int($0)
@@ -94,7 +94,7 @@ class ThenableTests: XCTestCase {
         }
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testPMKErrorCompactMap() {
         let ex = expectation(description: "")
         Promise.value("a").compactMap {
@@ -107,7 +107,7 @@ class ThenableTests: XCTestCase {
         }
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testCompactMapByKeyPath() {
         let ex = expectation(description: "")
         Promise.value(Person(name: "Roman", age: 26)).compactMap(\.age).done {
@@ -116,7 +116,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testMapValues() {
         let ex = expectation(description: "")
         Promise.value([14, 20, 45]).mapValues {
@@ -127,7 +127,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testMapValuesByKeyPath() {
         let ex = expectation(description: "")
         Promise.value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")]).mapValues(\.name).done {
@@ -136,7 +136,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testCompactMapValues() {
         let ex = expectation(description: "")
         Promise.value(["1","2","a","4"]).compactMapValues {
@@ -147,7 +147,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testCompactMapValuesByKeyPath() {
         let ex = expectation(description: "")
         Promise.value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)]).compactMapValues(\.age).done {
@@ -156,7 +156,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testThenMap() {
         let ex = expectation(description: "")
         Promise.value([1,2,3,4]).thenMap {
@@ -167,7 +167,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testThenFlatMap() {
         let ex = expectation(description: "")
         Promise.value([1,2,3,4]).thenFlatMap {
@@ -178,7 +178,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testFilterValues() {
         let ex = expectation(description: "")
         Promise.value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)]).filterValues {
@@ -189,7 +189,7 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testFilterValuesByKeyPath() {
         let ex = expectation(description: "")
         Promise.value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)]).filterValues(\.isStudent).done {
@@ -198,19 +198,19 @@ class ThenableTests: XCTestCase {
         }.silenceWarning()
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testLastValueForEmpty() {
         XCTAssertTrue(Promise.value([]).lastValue.isRejected)
     }
-
+    
     func testFirstValueForEmpty() {
         XCTAssertTrue(Promise.value([]).firstValue.isRejected)
     }
-
+    
     func testThenOffRejected() {
         // surprisingly missing in our CI, mainly due to
         // extensive use of `done` in A+ tests since PMK 5
-
+        
         let ex = expectation(description: "")
         Promise<Int>(error: PMKError.badInput).then { x -> Promise<Int> in
             XCTFail()
@@ -220,7 +220,7 @@ class ThenableTests: XCTestCase {
         }
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testBarrier() {
         let ex = expectation(description: "")
         let q = DispatchQueue(label: "\(#file):\(#line)", attributes: .concurrent)
@@ -233,7 +233,7 @@ class ThenableTests: XCTestCase {
         }
         wait(for: [ex], timeout: 10)
     }
-
+    
     func testDispatchFlagsSyntax() {
         let ex = expectation(description: "")
         let q = DispatchQueue(label: "\(#file):\(#line)", attributes: .concurrent)
@@ -241,8 +241,8 @@ class ThenableTests: XCTestCase {
             XCTAssertEqual($0, 1)
             dispatchPrecondition(condition: .onQueueAsBarrier(q))
             ex.fulfill()
-            }.catch { _ in
-                XCTFail()
+        }.catch { _ in
+            XCTFail()
         }
         wait(for: [ex], timeout: 10)
     }

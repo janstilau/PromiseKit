@@ -2,7 +2,7 @@ import class Foundation.Thread
 import Dispatch
 
 /*
-    A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
+ A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  */
 
 /*
@@ -11,6 +11,7 @@ import Dispatch
  Guarantee 里面, T 是业务数据类型, 而不是 Result 的类型.
  所以, 它的 Resolved 状态, 里面存的就是 T 类型的值, 没有用 Result 在去包装一层.
  */
+
 public final class Guarantee<T>: Thenable {
     
     public static func value(_ value: T) -> Guarantee<T> {
@@ -19,25 +20,22 @@ public final class Guarantee<T>: Thenable {
     }
     
     // 状态值.
+    // 
     let box: PromiseKit.Box<T>
     
     fileprivate init(box: SealedBox<T>) {
-        // 使用了 Sealed 状态的 Box.
-        // 也就是上来就是 Resolved 状态的 Box.
         self.box = box
     }
     
     /// Returns a pending `Guarantee` that can be resolved with the provided closure’s parameter.
     public init(resolver body: (@escaping(T) -> Void) -> Void) {
         box = Box()
-        // 这种写法, 会把 Box 进行捕获.
         body(box.seal)
     }
     
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
         pipe{
-            // 直接, 就是 Fulfilled 的状态. 没有 rejected 的状态.
             to(.fulfilled($0))
         }
     }

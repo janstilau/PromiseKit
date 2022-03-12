@@ -1,8 +1,8 @@
 import Dispatch
 
 /*
- Sealant 里面, 存储的会是 Result 类型.
- Handler 里面, 存储的是 处理 Result 类型的闭包.
+ 存储 Pending, Resolved 两种状态, 这两种状态, 是带有数据的.
+ 在 Swift 的库里面, 充分的利用了 Enum 这种类型. 
  */
 enum Sealant<R> {
     // 如果是在 Pending 状态, 那么 value 部分, 存储的是一个个的 Handler
@@ -11,11 +11,14 @@ enum Sealant<R> {
     case resolved(R)
 }
 
+// 存储所有的闭包, 也就是 Promise 的 Observer
 final class Handlers<R> {
     var bodies: [(R) -> Void] = []
     func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
 }
 
+// Box 更多的是一个接口类型, 他所做的事, 是查看当前的数据.
+// 这里设计有些复杂, coobjc 里面, 逻辑比较简单.
 class Box<T> {
     func inspect() -> Sealant<T> { fatalError() }
     func inspect(_: (Sealant<T>) -> Void) { fatalError() } // 使用该方法, 一定要在 inspect() 返回 Pending 的前提下使用.
@@ -31,15 +34,14 @@ final class SealedBox<T>: Box<T> {
         self.value = value
     }
     
-    // 特殊的 Box, 状态不会发生任何改变, 一个不可变对象.
-    // 不用考虑线程问题.
+    // 特殊的 Box, 状态不会发生任何改变, 一个不可变对象. 不用考虑线程问题.
     override func inspect() -> Sealant<T> {
         return .resolved(value)
     }
 }
 
 /*
- 虽然, 这里写的是 T, 但是其实是一个 Result 的类型.
+ 新生成的 Promise, 里面存储的是 EmptyBox 对象. 而 EmptyBox 里面, 存储的是一个 pending 状态的 Sealant 盒子.
  */
 class EmptyBox<T>: Box<T> {
     
@@ -49,22 +51,21 @@ class EmptyBox<T>: Box<T> {
     
     // 当, Box 从 Pending 变为 Resolved 的时候, 要把所有的回调取出来调用一次, 并且清空回调 .
     // 然后, 将自己的状态, 变为是 .resolved 的状态.
-    
     // 因为, 这是一个可变类型, 所以要考虑线程问题.
-    // 实际, 在 Resolver 里面, seal 的参数, 会是一个 Result 类型的对象.
     override func seal(_ value: T) {
         
         var handlers: Handlers<T>!
+        // 使用了 barrier 这种, 来进行线程环境的保护.
         barrier.sync(flags: .barrier) {
             guard case .pending(let _handlers) = self.sealant else {
                 return
             }
             handlers = _handlers
-            // 在这里, 完成了 Sealant 的状态切换.
-            // 之前存储的 Handlers 在这个时候, 会全部进行是释放.
+            // 直接使用 Enum 进行切换. Enum 切换, 里面的各种关联对象, 也会进行释放. 这就是使用 Enum 的好处, 相关的数据伴随着类型.
             self.sealant = .resolved(value)
         }
         
+        // 将之前存储的 Handler 统一进行一次触发.
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }
@@ -79,17 +80,12 @@ class EmptyBox<T>: Box<T> {
         return rv
     }
     
-    // 因为, 这是一个可变类型, 所以要考虑到线程问题.
-    // 现在的需求是, 需要 Body 的执行过程中, 保持线程独占. 这是使用的技术是, barrier queue.
+    /*
+     body 会在线程安全的环境下进行触发.
+     使用这种方式, 可以在 Body 里面, 对 Sealant 进行任意数据的修改.
+     */
     override func inspect(_ body: (Sealant<T>) -> Void) {
         var sealed = false
-        /*
-         When submitted to a concurrent queue, a work item with this flag acts as a barrier.
-         Work items submitted prior to the barrier execute to completion, at which point the barrier work item executes.
-         Once the barrier work item finishes, the queue returns to scheduling work items that were submitted after the barrier.
-         
-         barrier 应该更多的是和队列调度相关.
-         */
         barrier.sync(flags: .barrier) {
             switch sealant {
             case .pending:
@@ -109,7 +105,6 @@ class EmptyBox<T>: Box<T> {
 
 
 extension Optional where Wrapped: DispatchQueue {
-    @inline(__always)
     func async(flags: DispatchWorkItemFlags?,
                _ body: @escaping() -> Void) {
         switch self {

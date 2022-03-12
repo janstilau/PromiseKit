@@ -10,24 +10,16 @@ public final class Resolver<T> {
     init(_ box: Box<Result<T>>) {
         self.box = box
     }
-    
-    deinit {
-        if case .pending = box.inspect() {
-            conf.logHandler(.pendingPromiseDeallocated)
-        }
-    }
 }
 
-
+/*
+ 在 JS 里面, 是 FullFill, Reject 两个函数进行状态值的改变, 只不过这里专门定义了一个类型来做这件事.
+ */
 public extension Resolver {
     /*
         所有的操作, 都是进行 Box 的状态改变.
-        seal 并不是存储 T 的, 它是存储 Result T 的.
-        如果, fulfilled, 那么存储的就是 T
-        如果, rejected, 那么存储的就是 Error.
      */
     func fulfill(_ value: T) {
-        // 这里, 直接可以写 Fulfilled, 是因为上面的 Box, 已经写明了, 存储的是 Result<T> 这种类型.
         box.seal(.fulfilled(value))
     }
     
@@ -35,7 +27,6 @@ public extension Resolver {
         box.seal(.rejected(error))
     }
     
-    // 如果, 传递过来的, 直接就是 Result, 那么就使用 Resolve 函数. 
     func resolve(_ result: Result<T>) {
         box.seal(result)
     }
@@ -93,9 +84,7 @@ extension Resolver {
 }
 
 /*
- Resolved 状态下, 又分 fulfilled 和 rejected 两种.
- 在 Fulfilled 的状态下, 才会存储 T 类型的值.
- 在 Rejected 的状态下, 只会存储一个 Error.
+ 在 Resolved 的状态下, 会有以下的两种数据, 这在 Swift 环境下, 使用 Enum 的总和类型进行存储.
  */
 public enum Result<T> {
     case fulfilled(T)
@@ -109,7 +98,6 @@ public enum Result<T> {
 public extension PromiseKit.Result {
     var isFulfilled: Bool {
         switch self {
-        // 可以直接这么判断???
         case .fulfilled:
             return true
         case .rejected:

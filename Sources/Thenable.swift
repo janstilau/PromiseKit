@@ -1,30 +1,11 @@
 import Dispatch
 
-/*
- 异步任务的抽象.
- 1.   这个异步任务, 可以添加后续操作. 而这个后续操作, 是对结果进行 Check 的基础上进行的.
- 要判断, 是 Fulfilled, 还是 Rejected.
- 这在 JS 里面, 是 Then 里面, 添加两个函数. onResolved, onRejected 两个函数.
- 2.  可以查看当前的状态.
- */
-
+// 必须是一个 引用类型.
 public protocol Thenable: AnyObject {
     
     // T 代表的是, 这个异步操作的返回值. 是使用者最为关心的业务类型.
     associatedtype T
     
-    /*
-     这是最原始, 添加闭包回调的方式, 并不要求返回一个 Promise 回来.
-     但是, 它的处理的值, 是一个 Result 的值, 而不是一个业务的 T 的值.
-     所以, pipe 后的逻辑, 是根据当前 Promise 的 Resolved 的 Fulfilled 和 Rejected 两种状态值, 进行不同的操作.
-     */
-    
-    /*
-     这是一个, 自由度非常非常大的函数.
-     各种操作, 基本上是通过, 自定义回调函数的方式实现的.
-     Pipe 的操作, 是判断状态, 存储回调函数的机制 .
-     而回调函数的不同, 导致了后面不同的操作.
-     */
     func pipe(to: @escaping(Result<T>) -> Void)
     
     /// The resolved result or nil if pending.
@@ -33,50 +14,29 @@ public protocol Thenable: AnyObject {
     var result: Result<T>? { get }
 }
 
-
-/*
-    前面, 定义了抽象的方法.
-    后面, 就可以在抽象的方法的基础上, 定义复杂的功能方法了.
- 
-    下面, 各种操作, 都是建立在, 可以添加后续操作的这一最最基本的操作之上的. 
- */
 public extension Thenable {
     /*
      The provided closure executes when this promise is fulfilled. // 只用传递成功的值.
      
      This allows chaining promises. The promise returned by the provided closure is resolved before the promise returned by this closure resolves. // Body 生成的 Promise, 状态改变, 触发返回的 Promise 的状态改变.
      */
-    /*
-        和 JS 的 Then 不同, 这里的 Then, 传递的仅仅是 Fulfilled 状态下, 应该触发的异步操作.
-        因为, 在 Then 的内部, 自动处理了其他情况.
-     */
-    // Then 只处理, Fulfilled 状态下的响应, 和 JS 不同, Then 必须是返回一个 Promise, 也就是开启一个异步任务.
     func then<U: Thenable>(on: DispatchQueue? = conf.Q.map,
                            flags: DispatchWorkItemFlags? = nil,
+                           // Body 的含义是, 根据当前 Resolved 的值, 他可以生成一个新的 Thenable 对象.
                            _ body: @escaping(T) throws -> U) -> Promise<U.T> {
-        // RP
+        // 生成一个 Result Promise.
         let rp = Promise<U.T>(.pending)
         
-        /*
-         Pipe 里面, 是 Pending -> Resoled 状态时, 应该触发的操作.
-         而 Resolved 下, 是一个 Result, Result 会有两种状态.
-         then 方法, 只传递了 Fulfilled 的后续操作. 在 then 方法内部, 添加了默认的 Rejected 状态下的处理方法.
-         那就是, 将 RP 变为 Rejected.
-         */
         pipe {
+            // Pipe 传递过来的 Handler, 一定会是在 Resolved 的状态下才会调用.
             switch $0 {
             case .fulfilled(let value):
-                // 如果, 是 fulfilled 态, 那么就开启一个新的任务.
-                // 在这个新的任务上, 使用 Body 创建一个新的 Promise.
-                // 新创建的 Promise 的回调, 是改变 Return 的 RP 的状态.
-                // 这样, RV 的状态变化, 就可以触发 RP 添加的各种回调了.
                 on.async(flags: flags) {
-                    // 这种, 异步触发的方式, 是和 JS 一致的.
-                    // 如果, Body 的调用过程中, 触发了异常, RP 直接变为 Rejected 的状态. 
+                    // 如果, Body 的调用过程中, 触发了异常, RP 直接变为 Rejected 的状态.
                     do {
                         let rv = try body(value)
                         guard rv !== rp else { throw PMKError.returnedSelf }
-                        // RV 的状态变化的回调, 是触发 RP 的状态变化.
+                        // body 创建出来的 Promise 的状态, 直接决定了 return promise 的状态.
                         rv.pipe(to: rp.box.seal)
                     } catch {
                         rp.box.seal(.rejected(error))
@@ -100,13 +60,8 @@ public extension Thenable {
         This is like `then` but it requires the closure to return a non-promise.
      */
     /*
-        Map 中, Body 不再是返回一个 Promise, 而是根据上一个异步操作的结果生成一个新的值.
-        而这个新生成的值, 会是 Rp 的结果, 然后传递到 RP 的 Handler 里面去.
-        这在 RXSwift 里面, 也是经常使用的一个方法. Map 的含义就是映射, 添加这样的一个中间步骤, 并不添加任何的异步操作, 仅仅是值的变化.
-     */
-    /*
-        使用 Promise, 一定要有一个概念, 就是所有的回调, 并不是同步执行的.
-        它仅仅是触发. 而触发到哪个线程, 是否是同步的, 不重要.
+     Swift 的强类型, 将 JS 中 Then 进行了分离.
+     如果 Transform 返回的不是一个 Thenable, 那么直接在上一个 Promise Fullfill 之后, 直接进行 transform, 然后触发下一个 Promise 的状态改变.
      */
     func map<U>(on: DispatchQueue? = conf.Q.map,
                 flags: DispatchWorkItemFlags? = nil,
@@ -124,6 +79,7 @@ public extension Thenable {
                     }
                 }
             case .rejected(let error):
+                // 只要是错误, 就无缝传递, 这样最后的一个 catch 才能进行统一处理.
                 rp.box.seal(.rejected(error))
             }
         }
@@ -131,7 +87,7 @@ public extension Thenable {
         return rp
     }
     
-    /**
+    /*
      The provided closure is executed when this promise is fulfilled.
      
      In your closure return an `Optional`, if you return `nil` the resulting promise is rejected with `PMKError.compactMap`, otherwise the promise is fulfilled with the unwrapped value.
@@ -139,6 +95,7 @@ public extension Thenable {
      firstly {
      URLSession.shared.dataTask(.promise, with: url)
      }.compactMap {
+     // 从这里看, 这个 compactMap 是专门为 Swift 这种, 会有 Optianl 特殊的 Enum 而设计的函数.
      try JSONSerialization.jsonObject(with: $0.data) as? [String: String]
      }.done { dictionary in
      //…
@@ -168,6 +125,7 @@ public extension Thenable {
                     }
                 }
             case .rejected(let error):
+                // 还是, 上游的错误直接传递.
                 rp.box.seal(.rejected(error))
             }
         }
@@ -175,7 +133,7 @@ public extension Thenable {
         return rp
     }
     
-    /**
+    /*
      The provided closure is executed when this promise is fulfilled.
      
      Equivalent to `map { x -> Void in`, but since we force the `Void` return Swift
@@ -188,6 +146,7 @@ public extension Thenable {
      */
     func done(on: DispatchQueue? = conf.Q.return,
               flags: DispatchWorkItemFlags? = nil,
+              // 这是最终点了, 并且, 
               _ body: @escaping(T) throws -> Void) -> Promise<Void> {
         
         // 固定下来了, Result 的类型.
@@ -199,7 +158,9 @@ public extension Thenable {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
+                        // 仅仅是进行了 Body 的调用, 不会使用返回值.
                         try body(value)
+                        // 然后 return promise 使用 Void 进行 seal
                         rp.box.seal(.fulfilled(()))
                     } catch {
                         rp.box.seal(.rejected(error))
@@ -221,10 +182,9 @@ public extension Thenable {
         `get` immutably accesses the fulfilled value; the returned Promise maintains that value.
      */
     /*
-        以上, 所有的方法, 都是在 Fulfilled 的状态下, 做的操作.
-        在 Reject 状态下, 只是做 Error 的传递.
-     
-        这里, 利用了 Map 的处理机制. 在获取到上一个 Promise 的值后, 做了一件事情, 然后这个值, 原封不动的, 继续向后传递.
+        map 就是, 得到上一个 Promise 的结果值, 然后进行 transfrom, 将 transfrom 的值给与下一个 Promise 值.
+        这里是利用了 Map 的副作用, 得到上一个 Promise 的值, 调用 body 函数, 然后直接返回上一个 Promise 的值.
+        get 的 Body 不会影响到原有的异步执行链条.
      */
     func get(on: DispatchQueue? = conf.Q.return,
              flags: DispatchWorkItemFlags? = nil,
@@ -257,24 +217,12 @@ public extension Thenable {
             新生成一个 Promise, 它的值, 知道当前的 Promise 得到结果之后, 才会决定.
             这种, 通过传递一个 executor 来生成 Promise 的操作, 和 JS 里面就非常像了. 
          */
-        
-//
-//        let rp = Promise<T>(.pending)
-//
-//        pipe { result in
-//            on.async(flags: flags) {
-//                body(result)
-//                rp.box.seal(result)
-//            }
-//        }
-//
-//        return rp
-        
-        // 应该, 用上面的写法, 也能实现效果.
         return Promise { seal in
             pipe { result in
                 on.async(flags: flags) {
                     body(result)
+                    // 新生成的 Promise, 还是使用 result 的值.
+                    // Body 没有副作用.
                     seal.resolve(result)
                 }
             }
@@ -283,6 +231,7 @@ public extension Thenable {
     
     /// - Returns: a new promise chained off this promise but with its value discarded.
     func asVoid() -> Promise<Void> {
+        // 这里增加了一个中间节点, 将自己的 Result 值 transfrom 为 Void
         return map(on: nil) { _ in }
     }
 }

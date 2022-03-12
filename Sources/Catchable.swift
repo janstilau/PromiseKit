@@ -5,13 +5,17 @@ public protocol CatchMixin: Thenable {}
 
 public extension CatchMixin {
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      Rejecting a promise cascades: rejecting all subsequent promises (unless
      recover is invoked) thus you will typically place your catch at the end
      of a chain. Often utility promises will not have a catch, instead
      delegating the error handling to the caller.
+     */
+    /*
+     因为 Promise 响应链, Error 是传递的, 所以可以在最终进行错误的处理.
+     返回值不再是 Promise, 而是 PMKFinalizer, 所以只能进行 finnal 的添加了.
      */
     @discardableResult
     func `catch`(on: DispatchQueue? = conf.Q.return,
@@ -31,10 +35,13 @@ public extension CatchMixin {
                 // 只会在 Rejected 的状态下, 才会触发 Body.
                 // 触发了之后, finalizer 内管理的状态, 也就固定下来了.
                 on.async(flags: flags) {
+                    // body 不会直接影响到 finalizer
+                    // 仅仅是进行调用.
                     body(error)
                     finalizer.pending.resolve(())
                 }
             case .fulfilled:
+                // 之前的响应链没有错误.
                 finalizer.pending.resolve(())
             }
         }
@@ -52,8 +59,9 @@ public class PMKFinalizer {
     public func finally(on: DispatchQueue? = conf.Q.return,
                         flags: DispatchWorkItemFlags? = nil,
                         _ body: @escaping () -> Void) {
-        pending.guarantee.done(on: on,
-                               flags: flags) {
+        // 就是在 pending 里面增加一个回调.
+        // 在 catch 里面, 立定会触发 body 的调用. 
+        pending.guarantee.done(on: on, flags: flags) {
             body()
         }
     }
@@ -148,8 +156,8 @@ public extension CatchMixin {
      - Returns: A new promise, resolved with this promise’s resolution.
      */
     /*
-        ensure, 就是不管结果如何, 都执行 Body 里面的操作.
-        然后, 将 Rp 的状态, 变为 Result 的值 .
+     ensure, 就是不管结果如何, 都执行 Body 里面的操作.
+     然后, 将 Rp 的状态, 变为 Result 的值 .
      */
     func ensure(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
         let rp = Promise<T>(.pending)

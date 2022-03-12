@@ -13,56 +13,22 @@ public final class Promise<T>: Thenable, CatchMixin {
         self.box = box
     }
     
-    /**
-     Initialize a new fulfilled promise.
-     
-     We do not provide `init(value:)` because Swift is “greedy”
-     and would pick that initializer in cases where it should pick
-     one of the other more specific options leading to Promises with
-     `T` that is eg: `Error` or worse `(T->Void,Error->Void)` for
-     uses of our PMK < 4 pending initializer due to Swift trailing
-     closure syntax (nothing good comes without pain!).
-     
-     Though often easy to detect, sometimes these issues would be
-     hidden by other type inference leading to some nasty bugs in
-     production.
-     
-     In PMK5 we tried to work around this by making the pending
-     initializer take the form `Promise(.pending)` but this led to
-     bad migration errors for PMK4 users. Hence instead we quickly
-     released PMK6 and now only provide this initializer for making
-     sealed & fulfilled promises.
-     
-     Usage is still (usually) good:
-     
-     guard foo else {
-     return .value(bar)
-     }
-     */
     public static func value(_ value: T) -> Promise<T> {
         return Promise(box: SealedBox(value: .fulfilled(value)))
     }
     
-    /*
-     使用, 一个 Error 进行初始化, 就是将状态, 变为 Resolved, 里面的 Result 是 Rejected.
-     */
     public init(error: Error) {
         box = SealedBox(value: .rejected(error))
     }
     
-    /// Initialize a new promise bound to the provided `Thenable`.
     public init<U: Thenable>(_ bridge: U) where U.T == T {
         box = EmptyBox()
         bridge.pipe(to: box.seal)
     }
     
-    /// Initialize a new promise that can be resolved with the provided `Resolver`.
-    // 可以类似于, JS 里面的 executor 的用法.
-    // Resolver, 里面包装的就是 resolve, reject 函数.
-    
     /*
-     新生成的 Promise, 它的 Box 的状态改变, 只能通过 Resolver 来进行.
-     Body 闭包, 应该在适当的时机, 来调用 Resolver 的方法, 来使得 Promise 的状态发生改变.
+     使用者提供 Body 的实现, 在里面一般会创建异步任务.
+     使用者使用 Body 的参数, 完成 Promise 的状态的改变.
      */
     public init(resolver body: (Resolver<T>) throws -> Void) {
         box = EmptyBox()
@@ -75,15 +41,15 @@ public final class Promise<T>: Thenable, CatchMixin {
         }
     }
     
-    // 这个 Pending 的写法, 是类库里面的, 固定的命名规则.
     public class func pending() -> (promise: Promise<T>, resolver: Resolver<T>) {
+        // 非常非常烂的代码, 除了炫技有什么用.
         return { ($0, Resolver($0.box)) }(Promise<T>(.pending))
     }
     
-    // 如果, 是 Pending 态, 那么就讲 Handler 进行存储.
-    
+    // 如果, 是 Pending 态, 那么就将 Handler 进行存储.
+    // 如果, 是 Resolved 态, 就直接调用传递过来的 Handler.
     public func pipe(to: @escaping(Result<T>) -> Void) {
-        // box.inspect() get 操作, 里面有线程控制.
+        // 这里有一个 double check 的机制.
         switch box.inspect() {
         case .pending:
             box.inspect {
@@ -94,7 +60,6 @@ public final class Promise<T>: Thenable, CatchMixin {
                     to(value)
                 }
             }
-            // 如果, 已经是完成态了, 那么直接把存储的值给闭包执行.
         case .resolved(let value):
             to(value)
         }
