@@ -263,6 +263,10 @@ public extension Guarantee {
      1. 没有 switch 的判断, 因为 Gurantee 保证了, 一定会有值.
      2. 返回值一定还是 Guarantee 类型的, 不过绑定的类型参数, 变为了 U .
      */
+    /*
+     Thenable 里面, 会有 then 方法, 在这里面, 也会有 then 方法.
+     根据 body 的返回值, 其实会调用不同的方法的. 
+     */
     @discardableResult
     func then<U>(on: DispatchQueue? = conf.Q.map,
                  flags: DispatchWorkItemFlags? = nil,
