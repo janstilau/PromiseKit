@@ -10,7 +10,6 @@ import CoreFoundation
  
  - Returns: The value of the resolved promise
  - Throws: An error, should the promise be rejected
- - See: `wait()`
  */
 public func hang<T>(_ promise: Promise<T>) throws -> T {
     guard Thread.isMainThread else {

@@ -24,12 +24,7 @@ import Dispatch
  - Note: the block you pass executes immediately on the current thread/queue.
  */
 
-/*
-    Firstly 里面, 接受的 Body, 要返回一个 Promise.
-    然后返回一个 Promise.
-    根据 Body 的状态改变, 来决定新产生的 Promise 的状态.
-    而 Then, 是添加到这个新的 Promise 上的.
- */
+// 使用一个中间节点, 进行了状态的传递. 
 public func firstly<U: Thenable>(execute body: () throws -> U) -> Promise<U.T> {
     do {
         // 新生成一个 Promise, 返回这个值.

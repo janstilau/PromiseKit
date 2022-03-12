@@ -2,33 +2,30 @@ import Dispatch
 
 private func _race<U: Thenable>(_ thenables: [U]) -> Promise<U.T> {
     let rp = Promise<U.T>(.pending)
+    // 因为 Promise 的状态修改后, 后续的修改是不会再次影响它的. 所以, 可以这样写.
     for thenable in thenables {
         thenable.pipe(to: rp.box.seal)
     }
     return rp
 }
 
-/**
+/*
  Waits for one promise to resolve
  
  race(promise1, promise2, promise3).then { winner in
  //…
  }
- 
- - Returns: The promise that resolves first
- - Warning: If the first resolution is a rejection, the returned promise is rejected
  */
 public func race<U: Thenable>(_ thenables: U...) -> Promise<U.T> {
     return _race(thenables)
 }
 
-/**
+/*
  Waits for one promise to resolve
  
  race(promise1, promise2, promise3).then { winner in
  //…
  }
- 
  - Returns: The promise that resolves first
  - Warning: If the first resolution is a rejection, the returned promise is rejected
  - Remark: If the provided array is empty the returned promise is rejected with PMKError.badInput

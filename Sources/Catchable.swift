@@ -60,7 +60,7 @@ public class PMKFinalizer {
                         flags: DispatchWorkItemFlags? = nil,
                         _ body: @escaping () -> Void) {
         // 就是在 pending 里面增加一个回调.
-        // 在 catch 里面, 立定会触发 body 的调用. 
+        // 在 catch 里面, 立定会触发 body 的调用.
         pending.guarantee.done(on: on, flags: flags) {
             body()
         }
@@ -70,7 +70,7 @@ public class PMKFinalizer {
 
 public extension CatchMixin {
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      Unlike `catch`, `recover` continues the chain.
@@ -114,7 +114,7 @@ public extension CatchMixin {
         return rp
     }
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      This variant of `recover` requires the handler to return a Guarantee, thus it returns a Guarantee itself and your closure cannot `throw`.
      - Note it is logically impossible for this to take a `catchPolicy`, thus `allErrors` are handled.
@@ -163,6 +163,7 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
+                // 和 Get 没有太大的区别感觉. 只是 body 不需要上游节点的状态值.
                 body()
                 rp.box.seal(result)
             }
@@ -170,7 +171,7 @@ public extension CatchMixin {
         return rp
     }
     
-    /**
+    /*
      The provided closure executes when this promise resolves, whether it rejects or not.
      The chain waits on the returned `Guarantee<Void>`.
      
@@ -192,6 +193,9 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
+                // body 调用完毕只有, 继续触发 rp 的逻辑.
+                // 这里的 Body 是一个异步操作, 返回一个中间节点, 这个中间节点改变之后, 才会进行后续的操作.
+                // 后续节点, 还是使用 body 之前的数据, Body 完全是一个中间插入的节点.
                 body().done {
                     rp.box.seal(result)
                 }
@@ -217,7 +221,7 @@ public extension CatchMixin {
 
 public extension CatchMixin where T == Void {
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      This variant of `recover` is specialized for `Void` promises and de-errors your chain returning a `Guarantee`, thus you cannot `throw` and you must handle all errors including cancellation.
@@ -243,7 +247,7 @@ public extension CatchMixin where T == Void {
         return rg
     }
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      This variant of `recover` ensures that no error is thrown from the handler and allows specifying a catch policy.

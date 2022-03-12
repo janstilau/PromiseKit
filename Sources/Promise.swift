@@ -27,8 +27,8 @@ public final class Promise<T>: Thenable, CatchMixin {
     }
     
     /*
-     使用者提供 Body 的实现, 在里面一般会创建异步任务.
-     使用者使用 Body 的参数, 完成 Promise 的状态的改变.
+     使用者提供 Body 的实现, 在里面一般会创建异步任务. Body 是 Promise 的编写者主动调用的.
+     使用者使用 Body 的参数, 完成 Promise 的状态的改变. Body 的参数, 是外部的使用者主动调用的.
      */
     public init(resolver body: (Resolver<T>) throws -> Void) {
         box = EmptyBox()
