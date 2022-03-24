@@ -79,8 +79,10 @@ public extension Thenable {
         pipe {
             switch $0 {
             case .fulfilled(let value):
+                // 在 Promise 里面,
                 on.async(flags: flags) {
                     do {
+                        // 使用 transform 来操作上游节点的状态值, 将 map 节点的状态值, 使用 transfrom 结果的值进行 seal
                         rp.box.seal(.fulfilled(try transform(value)))
                     } catch {
                         rp.box.seal(.rejected(error))

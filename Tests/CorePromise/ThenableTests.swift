@@ -19,16 +19,19 @@ struct Person: Equatable {
 }
 
 class ThenableTests: XCTestCase {
+    
     func testGet() {
         let ex1 = expectation(description: "")
         let ex2 = expectation(description: "")
         Promise.value(1).get {
             XCTAssertEqual($0, 1)
             ex1.fulfill()
+            // Get 是拿到上游节点的 FulFilled 类型下的 T 进行使用. 然后将 Get 节点的状态, 使用上游节点的状态进行 resolve
         }.done {
             XCTAssertEqual($0, 1)
             ex2.fulfill()
         }.silenceWarning()
+        
         wait(for: [ex1, ex2], timeout: 10)
     }
     
@@ -44,8 +47,11 @@ class ThenableTests: XCTestCase {
     }
     
     func testMapByKeyPath() {
+        // 居然还可以这样.
         let ex = expectation(description: "")
-        Promise.value(Person(name: "Max")).map(\.name).done {
+        Promise.value(Person(name: "Max"))
+            .map(\.name)
+            .done {
             XCTAssertEqual($0, "Max")
             ex.fulfill()
         }.silenceWarning()
@@ -54,7 +60,7 @@ class ThenableTests: XCTestCase {
     
     func testCompactMap() {
         let ex = expectation(description: "")
-        Promise.value(1.0).compactMap {
+        Promise.value(1.3).compactMap {
             Int($0)
         }.done {
             XCTAssertEqual($0, 1)
@@ -69,6 +75,7 @@ class ThenableTests: XCTestCase {
         
         let ex = expectation(description: "")
         Promise.value("a").compactMap { x -> Int in
+            // 只要, 在传入的 Block 中 throw 了, 在外界就能捕获.
             throw E.dummy
         }.catch {
             if case E.dummy = $0 {} else {

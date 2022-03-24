@@ -1,6 +1,7 @@
 import PromiseKit
 
 extension Promise {
+    // 特意写的, 返回值继续被使用了, 不然 swift 会有警告. 
     func silenceWarning() {}
 }
 
