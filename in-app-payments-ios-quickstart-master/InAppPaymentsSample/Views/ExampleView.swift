@@ -64,7 +64,6 @@ extension ExampleView {
     private func makeCookieImage() -> UIImageView {
         let imageView = UIImageView(image: #imageLiteral(resourceName: "CookieImage"))
         
-        
         return imageView
     }
     

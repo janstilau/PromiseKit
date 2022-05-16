@@ -16,9 +16,6 @@
 
 import UIKit
 
-/*
- Super 
- */
 class ActionButton: UIButton {
     init(backgroundColor: UIColor, title: String?, image: UIImage?) {
         super.init(frame: .zero)
