@@ -6,8 +6,8 @@ private enum Error: Swift.Error { case dummy }
 
 class AsyncTests: XCTestCase {
     
-    #if swift(>=5.5)
-    #if canImport(_Concurrency)
+#if swift(>=5.5)
+#if canImport(_Concurrency)
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncPromiseValue() async throws {
         let promise = after(.milliseconds(100)).then(on: nil){ Promise.value(1) }
@@ -20,21 +20,21 @@ class AsyncTests: XCTestCase {
     @available(tvOS, deprecated: 13.0)
     @available(watchOS, deprecated: 6.0)
     func testAsyncPromiseValue() {
-
+        
     }
-    #else
+#else
     func testAsyncPromiseValue() {
-
+        
     }
-    #endif
-    #else
+#endif
+#else
     func testAsyncPromiseValue() {
-
+        
     }
-    #endif
+#endif
     
-    #if swift(>=5.5)
-    #if canImport(_Concurrency)
+#if swift(>=5.5)
+#if canImport(_Concurrency)
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncGuaranteeValue() async {
         let guarantee = after(.milliseconds(100)).then(on: nil){ Guarantee.value(1) }
@@ -47,21 +47,21 @@ class AsyncTests: XCTestCase {
     @available(tvOS, deprecated: 13.0)
     @available(watchOS, deprecated: 6.0)
     func testAsyncGuaranteeValue() {
-
+        
     }
-    #else
+#else
     func testAsyncGuaranteeValue() {
-
+        
     }
-    #endif
-    #else
+#endif
+#else
     func testAsyncGuaranteeValue() {
-
+        
     }
-    #endif
+#endif
     
-    #if swift(>=5.5)
-    #if canImport(_Concurrency)
+#if swift(>=5.5)
+#if canImport(_Concurrency)
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncPromiseThrow() async throws {
         do {
@@ -83,17 +83,17 @@ class AsyncTests: XCTestCase {
     @available(tvOS, deprecated: 13.0)
     @available(watchOS, deprecated: 6.0)
     func testAsyncPromiseThrow() {
-
+        
     }
-    #else
+#else
     func testAsyncPromiseThrow() {
-
+        
     }
-    #endif
-    #else
+#endif
+#else
     func testAsyncPromiseThrow() {
-
+        
     }
-    #endif
+#endif
 }
 
