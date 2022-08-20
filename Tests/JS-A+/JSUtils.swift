@@ -23,7 +23,7 @@ enum JSUtils {
         }
         return context
     }()
-    
+     
     static var undefined: JSValue {
         guard let undefined = JSValue(undefinedIn: JSUtils.sharedContext) else {
             fatalError("Couldn't create `undefined` value")

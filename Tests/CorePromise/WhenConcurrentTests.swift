@@ -102,7 +102,7 @@ class WhenConcurrentTestCase_Swift: XCTestCase {
                 return nil
             }
 
-            return after(.milliseconds(10)).then(on: .main) { _ -> Promise<Int> in
+            return after(.milliseconds(10)).then(queue: .main) { _ -> Promise<Int> in
                 currentConcurrently -= 1
                 return .value(number * number)
             }

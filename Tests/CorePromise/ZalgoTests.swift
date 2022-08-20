@@ -33,7 +33,7 @@ class ZalgoTests: XCTestCase {
         let ex = (expectation(description: ""), expectation(description: ""))
 
         var p1: Promise<Void>!
-        p1 = after(.milliseconds(100)).then(on: nil) { _ -> Promise<Void> in
+        p1 = after(.milliseconds(100)).then(queue: nil) { _ -> Promise<Void> in
             ex.0.fulfill()
             return p1
         }
@@ -50,7 +50,7 @@ class ZalgoTests: XCTestCase {
     func test4() {
         let ex = expectation(description: "")
         let p1 = Promise.value(1)
-        p1.then(on: nil) { _ -> Promise<Int> in
+        p1.then(queue: nil) { _ -> Promise<Int> in
             ex.fulfill()
             return p1
         }.silenceWarning()

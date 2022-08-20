@@ -1,11 +1,13 @@
+
+// 泛型, 将类型进行了绑定, 提供能加友好的操纵. 
 /// An object for resolving promises
 public final class Resolver<T> {
     let box: Box<Result<T>>
-
+    
     init(_ box: Box<Result<T>>) {
         self.box = box
     }
-
+    
     deinit {
         if case .pending = box.inspect() {
             conf.logHandler(.pendingPromiseDeallocated)
@@ -13,22 +15,25 @@ public final class Resolver<T> {
     }
 }
 
+// 这个类, 本质上是封装了对于 Box 状态改变操作.
+// 但是用户直接使用的, 是下面提供的各种快捷的操作.
+// 由于泛型的缘故, 用户其实是不会直接接触到 Box 层的. 
 public extension Resolver {
     /// Fulfills the promise with the provided value
     func fulfill(_ value: T) {
         box.seal(.fulfilled(value))
     }
-
+    
     /// Rejects the promise with the provided error
     func reject(_ error: Error) {
         box.seal(.rejected(error))
     }
-
+    
     /// Resolves the promise with the provided result
     func resolve(_ result: Result<T>) {
         box.seal(result)
     }
-
+    
     /// Resolves the promise with the provided value or error
     func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
@@ -39,7 +44,7 @@ public extension Resolver {
             reject(PMKError.invalidCallingConvention)
         }
     }
-
+    
     /// Fulfills the promise with the provided value unless the provided error is non-nil
     func resolve(_ obj: T, _ error: Error?) {
         if let error = error {
@@ -48,7 +53,7 @@ public extension Resolver {
             fulfill(obj)
         }
     }
-
+    
     /// Resolves the promise, provided for non-conventional value-error ordered completion handlers.
     func resolve(_ error: Error?, _ obj: T?) {
         resolve(obj, error)
@@ -67,7 +72,7 @@ extension Resolver where T == Void {
     }
 #if false
     // disabled ∵ https://github.com/mxcl/PromiseKit/issues/990
-
+    
     /// Fulfills the promise
     public func fulfill() {
         self.fulfill(())
@@ -94,6 +99,7 @@ extension Resolver {
 }
 #endif
 
+// 这不是 Swfit 的, 而是自己定义的 Result. 
 public enum Result<T> {
     case fulfilled(T)
     case rejected(Error)

@@ -6,53 +6,56 @@ import Dispatch
  - See: `Thenable`
  */
 public final class Promise<T>: Thenable, CatchMixin {
+    // 在真正使用的时候, 不是使用具体的类型, 而是一个接口对象.
+    // 在状态改变的时候, 直接进行接口对象的替换.
+    // 这样, 逻辑更加的清晰. 在 Promise 内部, 使用 Box 接口对象进行编码.
     let box: Box<Result<T>>
-
+    
     fileprivate init(box: SealedBox<Result<T>>) {
         self.box = box
     }
-
+    
     /**
-      Initialize a new fulfilled promise.
-
-      We do not provide `init(value:)` because Swift is “greedy”
-      and would pick that initializer in cases where it should pick
-      one of the other more specific options leading to Promises with
-      `T` that is eg: `Error` or worse `(T->Void,Error->Void)` for
-      uses of our PMK < 4 pending initializer due to Swift trailing
-      closure syntax (nothing good comes without pain!).
-
-      Though often easy to detect, sometimes these issues would be
-      hidden by other type inference leading to some nasty bugs in
-      production.
-
-      In PMK5 we tried to work around this by making the pending
-      initializer take the form `Promise(.pending)` but this led to
-      bad migration errors for PMK4 users. Hence instead we quickly
-      released PMK6 and now only provide this initializer for making
-      sealed & fulfilled promises.
-
-      Usage is still (usually) good:
-
-          guard foo else {
-              return .value(bar)
-          }
+     Initialize a new fulfilled promise.
+     
+     We do not provide `init(value:)` because Swift is “greedy”
+     and would pick that initializer in cases where it should pick
+     one of the other more specific options leading to Promises with
+     `T` that is eg: `Error` or worse `(T->Void,Error->Void)` for
+     uses of our PMK < 4 pending initializer due to Swift trailing
+     closure syntax (nothing good comes without pain!).
+     
+     Though often easy to detect, sometimes these issues would be
+     hidden by other type inference leading to some nasty bugs in
+     production.
+     
+     In PMK5 we tried to work around this by making the pending
+     initializer take the form `Promise(.pending)` but this led to
+     bad migration errors for PMK4 users. Hence instead we quickly
+     released PMK6 and now only provide this initializer for making
+     sealed & fulfilled promises.
+     
+     Usage is still (usually) good:
+     
+     guard foo else {
+     return .value(bar)
+     }
      */
     public static func value(_ value: T) -> Promise<T> {
         return Promise(box: SealedBox(value: .fulfilled(value)))
     }
-
+    
     /// Initialize a new rejected promise.
     public init(error: Error) {
         box = SealedBox(value: .rejected(error))
     }
-
+    
     /// Initialize a new promise bound to the provided `Thenable`.
     public init<U: Thenable>(_ bridge: U) where U.T == T {
         box = EmptyBox()
         bridge.pipe(to: box.seal)
     }
-
+    
     /// Initialize a new promise that can be resolved with the provided `Resolver`.
     public init(resolver body: (Resolver<T>) throws -> Void) {
         box = EmptyBox()
@@ -63,12 +66,12 @@ public final class Promise<T>: Thenable, CatchMixin {
             resolver.reject(error)
         }
     }
-
+    
     /// - Returns: a tuple of a new pending promise and its `Resolver`.
     public class func pending() -> (promise: Promise<T>, resolver: Resolver<T>) {
         return { ($0, Resolver($0.box)) }(Promise<T>(.pending))
     }
-
+    
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
         switch box.inspect() {
@@ -85,7 +88,7 @@ public final class Promise<T>: Thenable, CatchMixin {
             to(value)
         }
     }
-
+    
     /// - See: `Thenable.result`
     public var result: Result<T>? {
         switch box.inspect() {
@@ -95,7 +98,7 @@ public final class Promise<T>: Thenable, CatchMixin {
             return result
         }
     }
-
+    
     init(_: PMKUnambiguousInitializer) {
         box = EmptyBox()
     }
@@ -107,20 +110,20 @@ public extension Promise {
      any part of your chain may use. Like the main thread for example.
      */
     func wait() throws -> T {
-
+        
         if Thread.isMainThread {
             conf.logHandler(LogEvent.waitOnMainThread)
         }
-
+        
         var result = self.result
-
+        
         if result == nil {
             let group = DispatchGroup()
             group.enter()
             pipe { result = $0; group.leave() }
             group.wait()
         }
-
+        
         switch result! {
         case .rejected(let error):
             throw error
@@ -136,7 +139,7 @@ extension Promise where T == Void {
     public convenience init() {
         self.init(box: SealedBox(value: .fulfilled(Void())))
     }
-
+    
     /// Returns a new promise fulfilled with `Void`
     public static var value: Promise<Void> {
         return .value(Void())
@@ -148,13 +151,13 @@ extension Promise where T == Void {
 public extension DispatchQueue {
     /**
      Asynchronously executes the provided closure on a dispatch queue.
-
-         DispatchQueue.global().async(.promise) {
-             try md5(input)
-         }.done { md5 in
-             //…
-         }
-
+     
+     DispatchQueue.global().async(.promise) {
+     try md5(input)
+     }.done { md5 in
+     //…
+     }
+     
      - Parameter body: The closure that resolves this promise.
      - Returns: A new `Promise` resolved by the result of the provided closure.
      - Note: There is no Promise/Thenable version of this due to Swift compiler ambiguity issues.

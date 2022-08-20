@@ -10,7 +10,7 @@ class AsyncTests: XCTestCase {
 #if canImport(_Concurrency)
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncPromiseValue() async throws {
-        let promise = after(.milliseconds(100)).then(on: nil){ Promise.value(1) }
+        let promise = after(.milliseconds(100)).then(queue: nil){ Promise.value(1) }
         let value = try await promise.async()
         XCTAssertEqual(value, 1)
     }
@@ -37,7 +37,7 @@ class AsyncTests: XCTestCase {
 #if canImport(_Concurrency)
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncGuaranteeValue() async {
-        let guarantee = after(.milliseconds(100)).then(on: nil){ Guarantee.value(1) }
+        let guarantee = after(.milliseconds(100)).then(queue: nil){ Guarantee.value(1) }
         let value = await guarantee.async()
         XCTAssertEqual(value, 1)
     }
@@ -65,7 +65,7 @@ class AsyncTests: XCTestCase {
     @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
     func testAsyncPromiseThrow() async throws {
         do {
-            let promise = after(.milliseconds(100)).then(on: nil){ Promise(error: Error.dummy) }.then(on: nil){ Promise.value(1) }
+            let promise = after(.milliseconds(100)).then(queue: nil){ Promise(error: Error.dummy) }.then(queue: nil){ Promise.value(1) }
             try await _ = promise.async()
             XCTAssert(false)
         } catch {

@@ -1,5 +1,8 @@
 import Foundation
 
+/*
+ 在 API 的设计里面, 将该类库的所有 Error 集中到一起进行统一的维护, 是一个非常常见的设计方式. 
+ */
 public enum PMKError: Error {
     /**
      The completionHandler with form `(T?, Error?)` was called with `(nil, nil)`.

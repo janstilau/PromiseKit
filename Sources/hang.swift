@@ -13,22 +13,12 @@ import CoreFoundation
  - See: `wait()`
 */
 public func hang<T>(_ promise: Promise<T>) throws -> T {
-#if os(Linux) || os(Android)
-#if swift(>=4)
-    let runLoopMode: CFRunLoopMode = kCFRunLoopDefaultMode
-#else
-    // isMainThread is not yet implemented on Linux.
-    let runLoopModeRaw = RunLoopMode.defaultRunLoopMode.rawValue._bridgeToObjectiveC()
-    let runLoopMode: CFString = unsafeBitCast(runLoopModeRaw, to: CFString.self)
-#endif
-#else
     guard Thread.isMainThread else {
         // hang doesn't make sense on threads that aren't the main thread.
         // use `.wait()` on those threads.
         fatalError("Only call hang() on the main thread.")
     }
     let runLoopMode: CFRunLoopMode = CFRunLoopMode.defaultMode
-#endif
 
     if promise.isPending {
         var context = CFRunLoopSourceContext()
@@ -39,7 +29,9 @@ public func hang<T>(_ promise: Promise<T>) throws -> T {
         _ = promise.ensure {
             CFRunLoopStop(runLoop)
         }
-
+        
+        // 这里就是不断的判断, 如果 promise 的值 resolver, 就不断的在这里安插一个 Runloop.
+        // 这样可以保证整个应用保持原有的逻辑, 而这段代码卡住. 
         while promise.isPending {
             CFRunLoopRun()
         }

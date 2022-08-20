@@ -9,7 +9,7 @@ class RegressionTests: XCTestCase {
 
         do {
             let promise1 = Promise()
-            let promise2 = promise1.then(on: nil) { promise1 }
+            let promise2 = promise1.then(queue: nil) { promise1 }
             promise2.catch(on: nil) { _ in XCTFail() }
         }
         do {

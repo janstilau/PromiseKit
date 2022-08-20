@@ -9,7 +9,9 @@ import Dispatch
 */
 public struct PMKConfiguration {
     /// The default queues that promises handlers dispatch to
-    public var Q: (map: DispatchQueue?, return: DispatchQueue?) = (map: DispatchQueue.main, return: DispatchQueue.main)
+    // 可以在 Tuple 前面, 增加 Label.
+    public var Q: (map: DispatchQueue?,
+                   return: DispatchQueue?) = (map: DispatchQueue.main, return: DispatchQueue.main)
 
     /// The default catch-policy for all `catch` and `resolve`
     public var catchPolicy = CatchPolicy.allErrorsExceptCancellation

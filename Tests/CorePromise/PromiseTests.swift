@@ -116,7 +116,7 @@ class PromiseTests: XCTestCase {
     }
 
     func testWait() throws {
-        let p = after(.milliseconds(100)).then(on: nil){ Promise.value(1) }
+        let p = after(.milliseconds(100)).then(queue: nil){ Promise.value(1) }
         XCTAssertEqual(try p.wait(), 1)
 
         do {

@@ -142,6 +142,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		06FA4A0C28B0B34300AB3BC1 /* ES6_Promise.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ES6_Promise.h; sourceTree = "<group>"; };
 		085B96B121A6358900E5E22F /* LoggingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingTests.swift; sourceTree = "<group>"; };
 		085B96BE21A9B37C00E5E22F /* LogEvent.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = LogEvent.swift; path = Sources/LogEvent.swift; sourceTree = "<group>"; };
 		0C42F3191FCF86240051309C /* HangTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HangTests.swift; sourceTree = "<group>"; };
@@ -452,6 +453,7 @@
 				63B18AEB1F2D205C00B79E37 /* CustomStringConvertible.swift */,
 				63D9B2F020338D5D0075C00B /* Deprecations.swift */,
 				085B96BE21A9B37C00E5E22F /* LogEvent.swift */,
+				06FA4A0C28B0B34300AB3BC1 /* ES6_Promise.h */,
 			);
 			name = Sources.swift;
 			sourceTree = "<group>";

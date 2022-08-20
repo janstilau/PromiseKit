@@ -1,11 +1,12 @@
 import Dispatch
 
 enum Sealant<R> {
-    case pending(Handlers<R>)
+    case pending(ActionContainer<R>)
     case resolved(R)
 }
 
-final class Handlers<R> {
+// 这是一个引用类型, 这是非常重要的. 引用类型在枚举中进行存储, 读取之后做数据修改, 枚举不用重新赋值.
+final class ActionContainer<R> {
     var bodies: [(R) -> Void] = []
     func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
 }
@@ -17,45 +18,45 @@ class Box<T> {
     func seal(_: T) {}
 }
 
+/*
+ 封箱状态.
+ */
 final class SealedBox<T>: Box<T> {
     let value: T
-
+    
     init(value: T) {
         self.value = value
     }
-
+    
     override func inspect() -> Sealant<T> {
         return .resolved(value)
     }
 }
 
+/*
+ 未封箱状态. 可变为封箱状态.
+ */
 class EmptyBox<T>: Box<T> {
+    // 这种, .init 的写法, 在自己的代码里面很少写.
     private var sealant = Sealant<T>.pending(.init())
+    // 这里没太明白, barrier 在使用的时候, 都是使用的 sync.
     private let barrier = DispatchQueue(label: "org.promisekit.barrier", attributes: .concurrent)
-
+    
     override func seal(_ value: T) {
-        var handlers: Handlers<T>!
+        var handlers: ActionContainer<T>!
         barrier.sync(flags: .barrier) {
             guard case .pending(let _handlers) = self.sealant else {
                 return  // already fulfilled!
             }
             handlers = _handlers
+            // Enum 的替换, 直接让里面的数据也整体进行了替换.
             self.sealant = .resolved(value)
         }
-
-        //FIXME we are resolved so should `pipe(to:)` be called at this instant, “thens are called in order” would be invalid
-        //NOTE we don’t do this in the above `sync` because that could potentially deadlock
-        //THOUGH since `then` etc. typically invoke after a run-loop cycle, this issue is somewhat less severe
-
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }
-
-        //TODO solution is an unfortunate third state “sealed” where then's get added
-        // to a separate handler pool for that state
-        // any other solution has potential races
     }
-
+    
     override func inspect() -> Sealant<T> {
         var rv: Sealant<T>!
         barrier.sync {
@@ -63,13 +64,12 @@ class EmptyBox<T>: Box<T> {
         }
         return rv
     }
-
+    
     override func inspect(_ body: (Sealant<T>) -> Void) {
         var sealed = false
         barrier.sync(flags: .barrier) {
             switch sealant {
             case .pending:
-                // body will append to handlers, so we must stay barrier’d
                 body(sealant)
             case .resolved:
                 sealed = true

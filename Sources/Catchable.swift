@@ -20,12 +20,20 @@ public extension CatchMixin {
      - Returns: A promise finalizer.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
+    // 当使用 Catch 的时候, 其实返回值就不再是一个 Thenable 了. 而是 PMKFinalizer, 在里面, 只能调用特定的函数了.
     @discardableResult
-    func `catch`(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = conf.catchPolicy, _ body: @escaping(Error) -> Void) -> PMKFinalizer {
+    func `catch`(
+        on: DispatchQueue? = conf.Q.return,
+        flags: DispatchWorkItemFlags? = nil,
+        policy: CatchPolicy = conf.catchPolicy,
+        _ body: @escaping(Error) -> Void)
+    -> PMKFinalizer {
         let finalizer = PMKFinalizer()
         pipe {
             switch $0 {
             case .rejected(let error):
+                // 在 Guard 里面, 也可以 fallthrough
+                // 这里的 fallthrough 应该是直接到 case .fulfilled: 里面去了.
                 guard policy == .allErrors || !error.isCancelled else {
                     fallthrough
                 }
@@ -37,6 +45,8 @@ public extension CatchMixin {
                 finalizer.pending.resolve(())
             }
         }
+        // 无论是 fulfilled, rejected
+        // 最终 finalizer 的状态, 都会进行 resolve, 这样就确保, finnal 里面的行为, 一定会触发了.
         return finalizer
     }
 }
@@ -45,7 +55,11 @@ public class PMKFinalizer {
     let pending = Guarantee<Void>.pending()
 
     /// `finally` is the same as `ensure`, but it is not chainable
-    public func finally(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) {
+    public func finally(
+        on: DispatchQueue? = conf.Q.return,
+        flags: DispatchWorkItemFlags? = nil,
+        _ body: @escaping () -> Void)
+    {
         pending.guarantee.done(on: on, flags: flags) {
             body()
         }
@@ -54,8 +68,7 @@ public class PMKFinalizer {
 
 
 public extension CatchMixin {
-    
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      Unlike `catch`, `recover` continues the chain.
@@ -67,12 +80,13 @@ public extension CatchMixin {
              guard error == CLError.unknownLocation else { throw error }
              return .value(CLLocation.chicago)
          }
-     
-     - Parameter on: The queue to which the provided closure dispatches.
-     - Parameter body: The handler to execute if this promise is rejected.
-     - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover<U: Thenable>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = conf.catchPolicy, _ body: @escaping(Error) throws -> U) -> Promise<T> where U.T == T {
+    func recover<U: Thenable>(
+        on: DispatchQueue? = conf.Q.map,
+        flags: DispatchWorkItemFlags? = nil,
+        policy: CatchPolicy = conf.catchPolicy,
+        _ body: @escaping(Error) throws -> U)
+    -> Promise<T> where U.T == T {
         let rp = Promise<U.T>(.pending)
         pipe {
             switch $0 {
@@ -106,7 +120,11 @@ public extension CatchMixin {
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
     @discardableResult
-    func recover(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(Error) -> Guarantee<T>) -> Guarantee<T> {
+    func recover(
+        on: DispatchQueue? = conf.Q.map,
+        flags: DispatchWorkItemFlags? = nil,
+        _ body: @escaping(Error) -> Guarantee<T>)
+    -> Guarantee<T> {
         let rg = Guarantee<T>(.pending)
         pipe {
             switch $0 {
@@ -138,7 +156,12 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensure(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
+    // Ensure 和 Get 没有太大的区别.
+    func ensure(
+        on: DispatchQueue? = conf.Q.return,
+        flags: DispatchWorkItemFlags? = nil,
+        _ body: @escaping () -> Void)
+    -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
@@ -167,7 +190,11 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensureThen(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Guarantee<Void>) -> Promise<T> {
+    func ensureThen(
+        on: DispatchQueue? = conf.Q.return,
+        flags: DispatchWorkItemFlags? = nil,
+        _ body: @escaping () -> Guarantee<Void>)
+    -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
