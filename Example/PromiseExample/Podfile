@@ -1,0 +1,22 @@
+platform :ios, "13.0"
+
+source "https://cdn.cocoapods.org/"
+
+target "PromiseExample" do
+  pod "PromiseKit", :path => "../../"
+
+end
+
+post_install do |installer|
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings.delete("CODE_SIGNING_ALLOWED")
+    config.build_settings.delete("CODE_SIGNING_REQUIRED")
+  end
+  installer.pods_project.targets.each do |t|
+    t.build_configurations.each do |bc|
+      if bc.build_settings["IPHONEOS_DEPLOYMENT_TARGET"].to_f < 13.0
+        bc.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "13.0"
+      end
+    end
+  end
+end

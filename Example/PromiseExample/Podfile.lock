@@ -1,0 +1,24 @@
+PODS:
+  - PromiseKit (6.21.0):
+    - PromiseKit/CorePromise (= 6.21.0)
+    - PromiseKit/Foundation (= 6.21.0)
+    - PromiseKit/UIKit (= 6.21.0)
+  - PromiseKit/CorePromise (6.21.0)
+  - PromiseKit/Foundation (6.21.0):
+    - PromiseKit/CorePromise
+  - PromiseKit/UIKit (6.21.0):
+    - PromiseKit/CorePromise
+
+DEPENDENCIES:
+  - PromiseKit (from `../../`)
+
+EXTERNAL SOURCES:
+  PromiseKit:
+    :path: "../../"
+
+SPEC CHECKSUMS:
+  PromiseKit: 48ef8e68ea0f33c8bba86488fcaed23435809f40
+
+PODFILE CHECKSUM: e8e0a2844d063846452ab2b251937bc308bb31f7
+
+COCOAPODS: 1.11.3
