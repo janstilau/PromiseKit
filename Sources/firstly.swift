@@ -26,6 +26,7 @@ import Dispatch
  */
 public func firstly<U: Thenable>(execute body: () throws -> U) -> Promise<U.T> {
     do {
+        // 增加了一个中间节点, 但是让代码更加有的优雅. 
         let rp = Promise<U.T>(.pending)
         try body().pipe(to: rp.box.seal)
         return rp

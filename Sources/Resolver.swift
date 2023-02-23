@@ -1,4 +1,5 @@
 /// An object for resolving promises
+///
 // 专门定义了一个类, 来完成 Promise 内部的状态改变.
 // 状态改变, 已经被封装到了 Box 类的内部了.
 // 所以, 这个 Resolver 可以看做是 box 的工具类.
@@ -33,6 +34,7 @@ public extension Resolver {
         box.seal(result)
     }
     
+    // 下面的这几个方法, 都是为了适配原有的 Completion 异步操作的. 
     /// Resolves the promise with the provided value or error
     func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
@@ -44,6 +46,11 @@ public extension Resolver {
         }
     }
     
+    /// Resolves the promise, provided for non-conventional value-error ordered completion handlers.
+    func resolve(_ error: Error?, _ obj: T?) {
+        resolve(obj, error)
+    }
+    
     /// Fulfills the promise with the provided value unless the provided error is non-nil
     func resolve(_ obj: T, _ error: Error?) {
         if let error = error {
@@ -51,11 +58,6 @@ public extension Resolver {
         } else {
             fulfill(obj)
         }
-    }
-    
-    /// Resolves the promise, provided for non-conventional value-error ordered completion handlers.
-    func resolve(_ error: Error?, _ obj: T?) {
-        resolve(obj, error)
     }
 }
 

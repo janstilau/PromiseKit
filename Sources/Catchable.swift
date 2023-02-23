@@ -24,7 +24,7 @@ public extension CatchMixin {
      */
     // 因为 Catch 一般就是最后的处理, 所以返回值可以不做处理.
     @discardableResult
-    func `catch`(on: DispatchQueue? = shareConf.defaultQueue.return,
+    func `catch`(on: DispatchQueue? = shareConf.defaultQueue.end,
                  flags: DispatchWorkItemFlags? = nil,
                  policy: CatchPolicy = shareConf.catchPolicy,
                  _ body: @escaping(Error) -> Void) -> PMKFinalizer {
@@ -51,7 +51,7 @@ public class PMKFinalizer {
     let pending = Guarantee<Void>.pending()
 
     /// `finally` is the same as `ensure`, but it is not chainable
-    public func finally(on: DispatchQueue? = shareConf.defaultQueue.return,
+    public func finally(on: DispatchQueue? = shareConf.defaultQueue.end,
                         flags: DispatchWorkItemFlags? = nil,
                         _ body: @escaping () -> Void) {
         pending.guarantee.done(on: on, flags: flags) {
@@ -80,7 +80,8 @@ public extension CatchMixin {
      - Parameter body: The handler to execute if this promise is rejected.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map,
+    // Promise 的 recover 如果返回的是 U, 那么返回的就是一个 Promise.
+    func recover<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                               flags: DispatchWorkItemFlags? = nil,
                               policy: CatchPolicy = shareConf.catchPolicy,
                               _ body: @escaping(Error) throws -> U)
@@ -119,8 +120,9 @@ public extension CatchMixin {
      - Parameter body: The handler to execute if this promise is rejected.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
+    // Promise 的 recover(on 如果返回一个 Guarantee<T>, 那么后续就是 Guarantee<T>.
     @discardableResult
-    func recover(on: DispatchQueue? = shareConf.defaultQueue.map,
+    func recover(on: DispatchQueue? = shareConf.defaultQueue.processing,
                  flags: DispatchWorkItemFlags? = nil,
                  _ body: @escaping(Error) -> Guarantee<T>)
     -> Guarantee<T> {
@@ -155,7 +157,7 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensure(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
+    func ensure(on: DispatchQueue? = shareConf.defaultQueue.end, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
@@ -186,7 +188,7 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensureThen(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Guarantee<Void>) -> Promise<T> {
+    func ensureThen(on: DispatchQueue? = shareConf.defaultQueue.end, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Guarantee<Void>) -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
@@ -225,7 +227,10 @@ public extension CatchMixin where T == Void {
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
     @discardableResult
-    func recover(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(Error) -> Void) -> Guarantee<Void> {
+    func recover(on: DispatchQueue? = shareConf.defaultQueue.processing,
+                 flags: DispatchWorkItemFlags? = nil,
+                 _ body: @escaping(Error) -> Void)
+    -> Guarantee<Void> {
         let rg = Guarantee<Void>(.pending)
         pipe {
             switch $0 {
@@ -250,10 +255,11 @@ public extension CatchMixin where T == Void {
      - Parameter body: The handler to execute if this promise is rejected.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover(on: DispatchQueue? = shareConf.defaultQueue.map,
+    func recover(on: DispatchQueue? = shareConf.defaultQueue.processing,
                  flags: DispatchWorkItemFlags? = nil,
                  policy: CatchPolicy = shareConf.catchPolicy,
-                 _ body: @escaping(Error) throws -> Void) -> Promise<Void> {
+                 _ body: @escaping(Error) throws -> Void)
+    -> Promise<Void> {
         let rg = Promise<Void>(.pending)
         pipe {
             switch $0 {

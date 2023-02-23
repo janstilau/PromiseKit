@@ -2,11 +2,12 @@ import Dispatch
 
 // 将状态, 回调, 结果使用 Swfit Enum 这种方式进行了存储, 更加的显式.
 enum Sealant<R> {
-    case pending(Handlers<R>)
-    case resolved(R)
+    case pending(Handlers<R>) // 还没有 resolved, 这个时候, 存储了众多处理 Result 值的回调.
+    case resolved(R) // 已经 Resolve 了, 这时候, 存储了最终的这个 Result 值.
 }
 
 // 将, 回调这回事使用一个特定的类进行了存储.
+// 这是一个引用类型.
 final class Handlers<R> {
     var bodies: [(R) -> Void] = []
     func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
@@ -87,10 +88,13 @@ class EmptyBox<T>: Box<T> {
     }
 }
 
-
+// 这其实就是 Wrapper 这种方式实现的基础, 各种 kf, yd 其实都是这种方式实现的.
+// Option 其实就是一个 Wrapper 对象, 只不过他的 Type 是通过 case 进行了区分.
+// 这种扩展, 就是为什么一个 DispatchQueue? 可以调用 async 的原因所在了. 
 extension Optional where Wrapped: DispatchQueue {
     @inline(__always)
-    func async(flags: DispatchWorkItemFlags?, _ body: @escaping() -> Void) {
+    func async(flags: DispatchWorkItemFlags?,
+               _ body: @escaping() -> Void) {
         switch self {
         case .none:
             body()

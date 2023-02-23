@@ -76,6 +76,7 @@ public protocol CancellableError: Error {
 }
 
 extension Error {
+    // 居然用这种方式, 进行了 sync 函数的定义. 
     public var isCancelled: Bool {
         do {
             throw self

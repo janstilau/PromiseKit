@@ -83,8 +83,33 @@ public final class Guarantee<T>: Thenable {
 }
 
 public extension Guarantee {
+    func get(on: DispatchQueue? = shareConf.defaultQueue.end,
+             flags: DispatchWorkItemFlags? = nil,
+             _ body: @escaping (T) -> Void)
+    -> Guarantee<T> {
+        return map(on: on, flags: flags) {
+            body($0)
+            return $0
+        }
+    }
+
+    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
+                flags: DispatchWorkItemFlags? = nil,
+                _ body: @escaping(T) -> U)
+    -> Guarantee<U> {
+        let rg = Guarantee<U>(.pending)
+        pipe { value in
+            on.async(flags: flags) {
+                rg.box.seal(body(value))
+            }
+        }
+        return rg
+    }
+
+    // Done 的行为就是, body 只是用来执行, 并不用来传递状态.
+    // 后面所有的数据, 只会是 Void.
     @discardableResult
-    func done(on: DispatchQueue? = shareConf.defaultQueue.return,
+    func done(on: DispatchQueue? = shareConf.defaultQueue.end,
               flags: DispatchWorkItemFlags? = nil,
               _ body: @escaping(T) -> Void)
     -> Guarantee<Void> {
@@ -98,31 +123,10 @@ public extension Guarantee {
         return rg
     }
     
-    func get(on: DispatchQueue? = shareConf.defaultQueue.return,
-             flags: DispatchWorkItemFlags? = nil,
-             _ body: @escaping (T) -> Void)
-    -> Guarantee<T> {
-        return map(on: on, flags: flags) {
-            body($0)
-            return $0
-        }
-    }
-
-    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
-                flags: DispatchWorkItemFlags? = nil,
-                _ body: @escaping(T) -> U)
-    -> Guarantee<U> {
-        let rg = Guarantee<U>(.pending)
-        pipe { value in
-            on.async(flags: flags) {
-                rg.box.seal(body(value))
-            }
-        }
-        return rg
-    }
-
+    // Then 如果返回的 Promise. 那么还是走 Thenable 的逻辑. 因为 Promise 是会产生错误的, 所以返回的也就是 Promise, 可以返回错误的.
+    // 如果返回的是 Guarantee, Self 不会产生错误, Body 返回的不会返回错误, 那么 Retunr 的也就不会返回错误.
     @discardableResult
-    func then<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
+    func then<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                  flags: DispatchWorkItemFlags? = nil,
                  _ body: @escaping(T) -> Guarantee<U>)
     -> Guarantee<U> {
@@ -173,7 +177,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [2,4,6]
             }
      */
-    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U]> {
+    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { $0.map(transform) }
     }
 
@@ -187,7 +191,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => ["Max", "Roman", "John"]
             }
      */
-    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U>) -> Guarantee<[U]> {
+    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U>) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { $0.map { $0[keyPath: keyPath] } }
     }
     #endif
@@ -201,7 +205,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [1,1,2,2,3,3]
             }
      */
-    func flatMapValues<U: Sequence>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.Iterator.Element]> {
+    func flatMapValues<U: Sequence>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.Iterator.Element]> {
         return map(on: on, flags: flags) { (foo: T) in
             foo.flatMap { transform($0) }
         }
@@ -216,7 +220,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [1,2,3]
             }
      */
-    func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U?) -> Guarantee<[U]> {
+    func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U?) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
             #if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
             return foo.flatMap(transform)
@@ -236,7 +240,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [26, 23]
             }
      */
-    func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U?>) -> Guarantee<[U]> {
+    func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U?>) -> Guarantee<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
             #if !swift(>=4.1)
             return foo.flatMap { $0[keyPath: keyPath] }
@@ -256,7 +260,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [2,4,6]
             }
      */
-    func thenMap<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> Guarantee<U>) -> Guarantee<[U]> {
+    func thenMap<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> Guarantee<U>) -> Guarantee<[U]> {
         return then(on: on, flags: flags) {
             when(fulfilled: $0.map(transform))
         }.recover {
@@ -274,7 +278,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [1,1,2,2,3,3]
             }
      */
-    func thenFlatMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.T.Iterator.Element]> where U.T: Sequence {
+    func thenFlatMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) -> U) -> Guarantee<[U.T.Iterator.Element]> where U.T: Sequence {
         return then(on: on, flags: flags) {
             when(fulfilled: $0.map(transform))
         }.map(on: nil) {
@@ -294,7 +298,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [2,3]
             }
      */
-    func filterValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ isIncluded: @escaping(T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
+    func filterValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ isIncluded: @escaping(T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter(isIncluded)
         }
@@ -310,7 +314,7 @@ public extension Guarantee where T: Sequence {
                 // $0 => [Person(name: "John", age: 23, isStudent: true)]
             }
      */
-    func filterValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, Bool>) -> Guarantee<[T.Iterator.Element]> {
+    func filterValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, Bool>) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter { $0[keyPath: keyPath] }
         }
@@ -326,7 +330,7 @@ public extension Guarantee where T: Sequence {
             // $0 => [5,4,3,2,1]
         }
      */
-    func sortedValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ areInIncreasingOrder: @escaping(T.Iterator.Element, T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
+    func sortedValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ areInIncreasingOrder: @escaping(T.Iterator.Element, T.Iterator.Element) -> Bool) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.sorted(by: areInIncreasingOrder)
         }
@@ -343,7 +347,7 @@ public extension Guarantee where T: Sequence, T.Iterator.Element: Comparable {
             // $0 => [1,2,3,4,5]
         }
      */
-    func sortedValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil) -> Guarantee<[T.Iterator.Element]> {
+    func sortedValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil) -> Guarantee<[T.Iterator.Element]> {
         return map(on: on, flags: flags) { $0.sorted() }
     }
 }

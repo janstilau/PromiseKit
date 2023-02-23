@@ -46,7 +46,7 @@ public extension Thenable {
 #if PMKFullDeprecations
     /// disabled due to ambiguity with the other `.flatMap`
     @available(*, deprecated, message: "See: `compactMap`")
-    func flatMap<U>(on: DispatchQueue? = shareConf.defaultQueue.map, _ transform: @escaping(T) throws -> U?) -> Promise<U> {
+    func flatMap<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, _ transform: @escaping(T) throws -> U?) -> Promise<U> {
         return compactMap(on: on, transform)
     }
 #endif
@@ -56,19 +56,19 @@ public extension Thenable where T: Sequence {
 #if PMKFullDeprecations
     /// disabled due to ambiguity with the other `.map`
     @available(*, deprecated, message: "See: `mapValues`")
-    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U]> {
+    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U]> {
         return mapValues(on: on, transform)
     }
 
     /// disabled due to ambiguity with the other `.flatMap`
     @available(*, deprecated, message: "See: `flatMapValues`")
-    func flatMap<U: Sequence>(on: DispatchQueue? = shareConf.defaultQueue.map, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.Iterator.Element]> {
+    func flatMap<U: Sequence>(on: DispatchQueue? = shareConf.defaultQueue.processing, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.Iterator.Element]> {
         return flatMapValues(on: on, transform)
     }
 #endif
 
     @available(*, deprecated, message: "See: `filterValues`")
-    func filter(on: DispatchQueue? = shareConf.defaultQueue.map, test: @escaping (T.Iterator.Element) -> Bool) -> Promise<[T.Iterator.Element]> {
+    func filter(on: DispatchQueue? = shareConf.defaultQueue.processing, test: @escaping (T.Iterator.Element) -> Bool) -> Promise<[T.Iterator.Element]> {
         return filterValues(on: on, test)
     }
 }
@@ -87,7 +87,7 @@ public extension Thenable where T: Collection {
 
 public extension Thenable where T: Sequence, T.Iterator.Element: Comparable {
     @available(*, deprecated, message: "See: `sortedValues`")
-    func sorted(on: DispatchQueue? = shareConf.defaultQueue.map) -> Promise<[T.Iterator.Element]> {
+    func sorted(on: DispatchQueue? = shareConf.defaultQueue.processing) -> Promise<[T.Iterator.Element]> {
         return sortedValues(on: on)
     }
 }
