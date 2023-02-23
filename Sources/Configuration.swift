@@ -1,6 +1,6 @@
 import Dispatch
 
-/**
+/*
  PromiseKit’s configurable parameters.
 
  Do not change these after any Promise machinery executes as the configuration object is not thread-safe.

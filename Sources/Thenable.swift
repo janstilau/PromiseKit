@@ -23,15 +23,15 @@ import Dispatch
 public protocol Thenable: AnyObject {
     /// The type of the wrapped value
     associatedtype T
-
+    
     /// `pipe` is immediately executed when this `Thenable` is resolved
     /*
-     Pipe to 的参数, 就是当 Promise Resolved 的时候, 会调用回调. 
+     Pipe to 的参数, 就是当 Promise Resolved 的时候, 会调用回调.
      */
     func pipe(to: @escaping(Result<T>) -> Void)
-
+    
     /// The resolved result or nil if pending.
-    // Optional + Result 表示了: 没有值, 有值错误, 有值正确三种状态. 
+    // Optional + Result 表示了: 没有值, 有值错误, 有值正确三种状态.
     var result: Result<T>? { get }
 }
 
@@ -50,17 +50,17 @@ public extension Thenable {
      
      // 这里说的很明确, 两个 Promise 之间的关系.
      - Returns: A new promise that resolves when the promise returned from the provided closure resolves. For example:
- 
-           firstly {
-               URLSession.shared.dataTask(.promise, with: url1)
-           }.then { response in
-               transform(data: response.data)
-           }.done { transformation in
-               //…
-           }
+      
+     firstly {
+     URLSession.shared.dataTask(.promise, with: url1)
+     }.then { response in
+     transform(data: response.data)
+     }.done { transformation in
+     //…
+     }
      */
     // 这里的实现逻辑, 其实和 JS 版本没有什么不同.
-    // 实际上, 连接异步操作的行为, 是直接定义在了 Thenable 的内部了. 
+    // 实际上, 连接异步操作的行为, 是直接定义在了 Thenable 的内部了.
     func then<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map,
                            flags: DispatchWorkItemFlags? = nil,
                            _ body: @escaping(T) throws -> U)
@@ -73,12 +73,17 @@ public extension Thenable {
             // 因为 Promise 一定是 Result 确定了之后, 才调用自己的 callback 的, 所以一定是有值.
             switch $0 {
             case .fulfilled(let value):
+                // 这里会有一个分发的机制, 但是没有在 rejected 的时候进行分发.
+                // 先猜测, shareQueue 里面的两个 queue 和业务相关.
                 on.async(flags: flags) {
                     do {
                         let rv = try body(value)
                         guard rv !== rp else { throw PMKError.returnedSelf }
+                        // 在第三方库里面, 经常出现这种直接传递方法的形式, rp.box.seal, 和 { rp.box.seal } 没有任何区别, 强引用
+                        // 将两个 Promise 状态进行了触发关联.
                         rv.pipe(to: rp.box.seal)
                     } catch {
+                        // 从这里可以看出, Promise 里面的 Error, 是一个 Void* Error.
                         rp.box.seal(.rejected(error))
                     }
                 }
@@ -89,8 +94,8 @@ public extension Thenable {
         }
         return rp
     }
-
-    /**
+    
+    /*
      The provided closure is executed when this promise is fulfilled.
      
      This is like `then` but it requires the closure to return a non-promise.
@@ -98,21 +103,26 @@ public extension Thenable {
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter transform: The closure that is executed when this Promise is fulfilled. It must return a non-promise.
      - Returns: A new promise that is fulfilled with the value returned from the provided closure or rejected if the provided closure throws. For example:
-
-           firstly {
-               URLSession.shared.dataTask(.promise, with: url1)
-           }.map { response in
-               response.data.length
-           }.done { length in
-               //…
-           }
+     
+     firstly {
+     URLSession.shared.dataTask(.promise, with: url1)
+     }.map { response in
+     response.data.length
+     }.done { length in
+     //…
+     }
      */
     // Map 就没有中间的 Promise 生成了, 在 Swift 实现里面, 将 then 里面返回 Promise 和返回一个确定的类型分开了.
-    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T) throws -> U) -> Promise<U> {
+    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
+                flags: DispatchWorkItemFlags? = nil,
+                _ transform: @escaping(T) throws -> U)
+    -> Promise<U> {
         let rp = Promise<U>(.pending)
         pipe {
             switch $0 {
             case .fulfilled(let value):
+                // RP 的状态确定在这里就完成了, 没有引入到另外一个 Promise 做关联.
+                // Js 里面, 是由类型判断完成的, 在 Swift 则是由特定的方法有着更加显式地表示.
                 on.async(flags: flags) {
                     do {
                         rp.box.seal(.fulfilled(try transform(value)))
@@ -126,23 +136,27 @@ public extension Thenable {
         }
         return rp
     }
-
+    
     /*
-      The provided closure is executed when this promise is fulfilled.
-
-      In your closure return an `Optional`, if you return `nil` the resulting promise is rejected with `PMKError.compactMap`, otherwise the promise is fulfilled with the unwrapped value.
-
-           firstly {
-               URLSession.shared.dataTask(.promise, with: url)
-           }.compactMap {
-               try JSONSerialization.jsonObject(with: $0.data) as? [String: String]
-           }.done { dictionary in
-               //…
-           }.catch {
-               // either `PMKError.compactMap` or a `JSONError`
-           }
+     The provided closure is executed when this promise is fulfilled.
+     
+     In your closure return an `Optional`,
+     if you return `nil` the resulting promise is rejected with `PMKError.compactMap`, otherwise the promise is fulfilled with the unwrapped value.
+     
+     firstly {
+     URLSession.shared.dataTask(.promise, with: url)
+     }.compactMap {
+     try JSONSerialization.jsonObject(with: $0.data) as? [String: String]
+     }.done { dictionary in
+     //…
+     }.catch {
+     // either `PMKError.compactMap` or a `JSONError`
+     }
      */
-    func compactMap<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T) throws -> U?) -> Promise<U> {
+    func compactMap<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
+                       flags: DispatchWorkItemFlags? = nil,
+                       _ transform: @escaping(T) throws -> U?)
+    -> Promise<U> {
         let rp = Promise<U>(.pending)
         pipe {
             switch $0 {
@@ -152,6 +166,8 @@ public extension Thenable {
                         if let rv = try transform(value) {
                             rp.box.seal(.fulfilled(rv))
                         } else {
+                            // 这里的 CompactMap 直接当做了错误.
+                            // 和 Combine 一样, 在整个响应联调的内部, 自己处理了 throw.
                             throw PMKError.compactMap(value, U.self)
                         }
                     } catch {
@@ -164,32 +180,36 @@ public extension Thenable {
         }
         return rp
     }
-
-    /**
+    
+    /*
      The provided closure is executed when this promise is fulfilled.
      
-     Equivalent to `map { x -> Void in`, but since we force the `Void` return Swift
-     is happier and gives you less hassle about your closure’s qualification.
+     Equivalent to `map { x -> Void in`, but since we force the `Void` return
+     Swift is happier and gives you less hassle about your closure’s qualification.
      
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that is executed when this Promise is fulfilled.
      - Returns: A new promise fulfilled as `Void` or rejected if the provided closure throws.
      
-           firstly {
-               URLSession.shared.dataTask(.promise, with: url)
-           }.done { response in
-               print(response.data)
-           }
+     firstly {
+     URLSession.shared.dataTask(.promise, with: url)
+     }.done { response in
+     print(response.data)
+     }
      */
     // Donw 返回的是 Promise<Void>, 是一个特殊的类型.
-    //
-    func done(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) throws -> Void) -> Promise<Void> {
+    // 从业务逻辑上来讲, Void 的 Output 就不应该有后续的 Promise 了, 因为 Void 无法给后续任务带来输入.
+    func done(on: DispatchQueue? = shareConf.defaultQueue.return,
+              flags: DispatchWorkItemFlags? = nil,
+              _ body: @escaping(T) throws -> Void)
+    -> Promise<Void> {
         let rp = Promise<Void>(.pending)
         pipe {
             switch $0 {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
+                        // 这里, Body 的结果不会和 Promise 的状态进行关联.
                         try body(value)
                         rp.box.seal(.fulfilled(()))
                     } catch {
@@ -202,8 +222,8 @@ public extension Thenable {
         }
         return rp
     }
-
-    /**
+    
+    /*
      The provided closure is executed when this promise is fulfilled.
      
      This is like `done` but it returns the same value that the handler is fed.
@@ -213,36 +233,44 @@ public extension Thenable {
      - Parameter body: The closure that is executed when this Promise is fulfilled.
      - Returns: A new promise that is fulfilled with the value that the handler is fed or rejected if the provided closure throws. For example:
      
-           firstly {
-               .value(1)
-           }.get { foo in
-               print(foo, " is 1")
-           }.done { foo in
-               print(foo, " is 1")
-           }.done { foo in
-               print(foo, " is Void")
-           }
+     firstly {
+     .value(1)
+     }.get { foo in
+     print(foo, " is 1")
+     }.done { foo in
+     print(foo, " is 1")
+     }.done { foo in
+     print(foo, " is Void")
+     }
      */
-    func get(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping (T) throws -> Void) -> Promise<T> {
+    // 在中间安插一个操作, 但是不影响整个数据流转流程.
+    // map 的变体.
+    func get(on: DispatchQueue? = shareConf.defaultQueue.return,
+             flags: DispatchWorkItemFlags? = nil,
+             _ body: @escaping (T) throws -> Void) -> Promise<T> {
         return map(on: on, flags: flags) {
             try body($0)
             return $0
         }
     }
-
+    
     /**
      The provided closure is executed with promise result.
-
+     
      This is like `get` but provides the Result<T> of the Promise so you can inspect the value of the chain at this point without causing any side effects.
-
+     
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that is executed with Result of Promise.
      - Returns: A new promise that is resolved with the result that the handler is fed. For example:
-
+     
      promise.tap{ print($0) }.then{ /*…*/ }
      */
-    func tap(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(Result<T>) -> Void) -> Promise<T> {
+    func tap(on: DispatchQueue? = shareConf.defaultQueue.map,
+             flags: DispatchWorkItemFlags? = nil,
+             _ body: @escaping(Result<T>) -> Void)
+    -> Promise<T> {
         return Promise { seal in
+            // 这里的 Pipe 是当前 Promise 调用者的 Pipe, 这里的定义, 和 JS 里面的定义就很像了.
             pipe { result in
                 on.async(flags: flags) {
                     body(result)
@@ -251,17 +279,19 @@ public extension Thenable {
             }
         }
     }
-
+    
     /// - Returns: a new promise chained off this promise but with its value discarded.
     func asVoid() -> Promise<Void> {
         return map(on: nil) { _ in }
     }
 }
 
+// 便利的 Get 属性的定义.
 public extension Thenable {
-    /**
+    /*
      - Returns: The error with which this promise was rejected; `nil` if this promise is not rejected.
      */
+    // 抽取 rejected 这种情况下的 Error .
     var error: Error? {
         switch result {
         case .none:
@@ -272,38 +302,39 @@ public extension Thenable {
             return error
         }
     }
-
+    
     /**
      - Returns: `true` if the promise has not yet resolved.
      */
     var isPending: Bool {
         return result == nil
     }
-
+    
     /**
      - Returns: `true` if the promise has resolved.
      */
     var isResolved: Bool {
         return !isPending
     }
-
+    
     /**
      - Returns: `true` if the promise was fulfilled.
      */
     var isFulfilled: Bool {
         return value != nil
     }
-
+    
     /**
      - Returns: `true` if the promise was rejected.
      */
     var isRejected: Bool {
         return error != nil
     }
-
+    
     /**
      - Returns: The value with which this promise was fulfilled or `nil` if this promise is pending or rejected.
      */
+    // 抽取 fulfilled 下的 value 值. 
     var value: T? {
         switch result {
         case .none:
@@ -319,120 +350,120 @@ public extension Thenable {
 public extension Thenable where T: Sequence {
     /**
      `Promise<[T]>` => `T` -> `U` => `Promise<[U]>`
-
-         firstly {
-             .value([1,2,3])
-         }.mapValues { integer in
-             integer * 2
-         }.done {
-             // $0 => [2,4,6]
-         }
+     
+     firstly {
+     .value([1,2,3])
+     }.mapValues { integer in
+     integer * 2
+     }.done {
+     // $0 => [2,4,6]
+     }
      */
     func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U]> {
         return map(on: on, flags: flags){ try $0.map(transform) }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Promise<[T]>` => `KeyPath<T, U>` => `Promise<[U]>`
-
-         firstly {
-             .value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")])
-         }.mapValues(\.name).done {
-             // $0 => ["Max", "Roman", "John"]
-         }
+     
+     firstly {
+     .value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")])
+     }.mapValues(\.name).done {
+     // $0 => ["Max", "Roman", "John"]
+     }
      */
     func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U>) -> Promise<[U]> {
         return map(on: on, flags: flags){ $0.map { $0[keyPath: keyPath] } }
     }
-    #endif
-
+#endif
+    
     /**
      `Promise<[T]>` => `T` -> `[U]` => `Promise<[U]>`
-
-         firstly {
-             .value([1,2,3])
-         }.flatMapValues { integer in
-             [integer, integer]
-         }.done {
-             // $0 => [1,1,2,2,3,3]
-         }
+     
+     firstly {
+     .value([1,2,3])
+     }.flatMapValues { integer in
+     [integer, integer]
+     }.done {
+     // $0 => [1,1,2,2,3,3]
+     }
      */
     func flatMapValues<U: Sequence>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.Iterator.Element]> {
         return map(on: on, flags: flags){ (foo: T) in
             try foo.flatMap{ try transform($0) }
         }
     }
-
+    
     /**
      `Promise<[T]>` => `T` -> `U?` => `Promise<[U]>`
-
-         firstly {
-             .value(["1","2","a","3"])
-         }.compactMapValues {
-             Int($0)
-         }.done {
-             // $0 => [1,2,3]
-         }
+     
+     firstly {
+     .value(["1","2","a","3"])
+     }.compactMapValues {
+     Int($0)
+     }.done {
+     // $0 => [1,2,3]
+     }
      */
     func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U?) -> Promise<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
-          #if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
+#if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
             return try foo.flatMap(transform)
-          #else
+#else
             return try foo.compactMap(transform)
-          #endif
+#endif
         }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Promise<[T]>` => `KeyPath<T, U?>` => `Promise<[U]>`
-
-         firstly {
-             .value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)])
-         }.compactMapValues(\.age).done {
-             // $0 => [26, 23]
-         }
+     
+     firstly {
+     .value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)])
+     }.compactMapValues(\.age).done {
+     // $0 => [26, 23]
+     }
      */
     func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U?>) -> Promise<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
-          #if !swift(>=4.1)
+#if !swift(>=4.1)
             return foo.flatMap { $0[keyPath: keyPath] }
-          #else
+#else
             return foo.compactMap { $0[keyPath: keyPath] }
-          #endif
+#endif
         }
     }
-    #endif
-
+#endif
+    
     /**
      `Promise<[T]>` => `T` -> `Promise<U>` => `Promise<[U]>`
-
-         firstly {
-             .value([1,2,3])
-         }.thenMap { integer in
-             .value(integer * 2)
-         }.done {
-             // $0 => [2,4,6]
-         }
+     
+     firstly {
+     .value([1,2,3])
+     }.thenMap { integer in
+     .value(integer * 2)
+     }.done {
+     // $0 => [2,4,6]
+     }
      */
     func thenMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.T]> {
         return then(on: on, flags: flags) {
             when(fulfilled: try $0.map(transform))
         }
     }
-
+    
     /**
      `Promise<[T]>` => `T` -> `Promise<[U]>` => `Promise<[U]>`
-
-         firstly {
-             .value([1,2,3])
-         }.thenFlatMap { integer in
-             .value([integer, integer])
-         }.done {
-             // $0 => [1,1,2,2,3,3]
-         }
+     
+     firstly {
+     .value([1,2,3])
+     }.thenFlatMap { integer in
+     .value([integer, integer])
+     }.done {
+     // $0 => [1,1,2,2,3,3]
+     }
      */
     func thenFlatMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.T.Iterator.Element]> where U.T: Sequence {
         return then(on: on, flags: flags) {
@@ -441,40 +472,40 @@ public extension Thenable where T: Sequence {
             $0.flatMap{ $0 }
         }
     }
-
+    
     /**
      `Promise<[T]>` => `T` -> Bool => `Promise<[T]>`
-
-         firstly {
-             .value([1,2,3])
-         }.filterValues {
-             $0 > 1
-         }.done {
-             // $0 => [2,3]
-         }
+     
+     firstly {
+     .value([1,2,3])
+     }.filterValues {
+     $0 > 1
+     }.done {
+     // $0 => [2,3]
+     }
      */
     func filterValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ isIncluded: @escaping (T.Iterator.Element) -> Bool) -> Promise<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter(isIncluded)
         }
     }
-
-    #if swift(>=4) && !swift(>=5.2)
+    
+#if swift(>=4) && !swift(>=5.2)
     /**
      `Promise<[T]>` => `KeyPath<T, Bool>` => `Promise<[T]>`
-
-         firstly {
-             .value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)])
-         }.filterValues(\.isStudent).done {
-             // $0 => [Person(name: "John", age: 23, isStudent: true)]
-         }
+     
+     firstly {
+     .value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)])
+     }.filterValues(\.isStudent).done {
+     // $0 => [Person(name: "John", age: 23, isStudent: true)]
+     }
      */
     func filterValues(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, Bool>) -> Promise<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
             $0.filter { $0[keyPath: keyPath] }
         }
     }
-    #endif
+#endif
 }
 
 public extension Thenable where T: Collection {
@@ -488,7 +519,7 @@ public extension Thenable where T: Collection {
             }
         }
     }
-
+    
     func firstValue(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, where test: @escaping (T.Iterator.Element) -> Bool) -> Promise<T.Iterator.Element> {
         return map(on: on, flags: flags) {
             for x in $0 where test(x) {
@@ -497,7 +528,7 @@ public extension Thenable where T: Collection {
             throw PMKError.emptySequence
         }
     }
-
+    
     /// - Returns: a promise fulfilled with the last value of this `Collection` or, if empty, a promise rejected with PMKError.emptySequence.
     var lastValue: Promise<T.Iterator.Element> {
         return map(on: nil) { aa in
