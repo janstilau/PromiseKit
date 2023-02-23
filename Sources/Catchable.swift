@@ -5,13 +5,16 @@ public protocol CatchMixin: Thenable {}
 
 public extension CatchMixin {
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      Rejecting a promise cascades: rejecting all subsequent promises (unless
      recover is invoked) thus you will typically place your catch at the end
-     of a chain. Often utility promises will not have a catch, instead
-     delegating the error handling to the caller.
+     of a chain.
+     
+     // 这里说明了一下, API 设计的原则, 工具行的 Promise 返回值, 不会真正的进行错误处理.
+     // 应该是由业务方, 进行错误处理.
+     Often utility promises will not have a catch, instead delegating the error handling to the caller.
      
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter policy: The default policy does not execute your handler for cancellation errors.
@@ -19,8 +22,12 @@ public extension CatchMixin {
      - Returns: A promise finalizer.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
+    // 因为 Catch 一般就是最后的处理, 所以返回值可以不做处理.
     @discardableResult
-    func `catch`(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = shareConf.catchPolicy, _ body: @escaping(Error) -> Void) -> PMKFinalizer {
+    func `catch`(on: DispatchQueue? = shareConf.defaultQueue.return,
+                 flags: DispatchWorkItemFlags? = nil,
+                 policy: CatchPolicy = shareConf.catchPolicy,
+                 _ body: @escaping(Error) -> Void) -> PMKFinalizer {
         let finalizer = PMKFinalizer()
         pipe {
             switch $0 {
@@ -44,7 +51,9 @@ public class PMKFinalizer {
     let pending = Guarantee<Void>.pending()
 
     /// `finally` is the same as `ensure`, but it is not chainable
-    public func finally(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) {
+    public func finally(on: DispatchQueue? = shareConf.defaultQueue.return,
+                        flags: DispatchWorkItemFlags? = nil,
+                        _ body: @escaping () -> Void) {
         pending.guarantee.done(on: on, flags: flags) {
             body()
         }
@@ -54,7 +63,7 @@ public class PMKFinalizer {
 
 public extension CatchMixin {
     
-    /**
+    /*
      The provided closure executes when this promise rejects.
      
      Unlike `catch`, `recover` continues the chain.
@@ -71,7 +80,11 @@ public extension CatchMixin {
      - Parameter body: The handler to execute if this promise is rejected.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = shareConf.catchPolicy, _ body: @escaping(Error) throws -> U) -> Promise<T> where U.T == T {
+    func recover<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.map,
+                              flags: DispatchWorkItemFlags? = nil,
+                              policy: CatchPolicy = shareConf.catchPolicy,
+                              _ body: @escaping(Error) throws -> U)
+    -> Promise<T> where U.T == T {
         let rp = Promise<U.T>(.pending)
         pipe {
             switch $0 {
@@ -81,6 +94,8 @@ public extension CatchMixin {
                 if policy == .allErrors || !error.isCancelled {
                     on.async(flags: flags) {
                         do {
+                            // rp 的状态, 除了在 fulfilled 的时候有 self promise 决定.
+                            // 也会在在 Error 的时候, 由新生的 Thenable 决定.
                             let rv = try body(error)
                             guard rv !== rp else { throw PMKError.returnedSelf }
                             rv.pipe(to: rp.box.seal)
@@ -105,7 +120,10 @@ public extension CatchMixin {
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
     @discardableResult
-    func recover(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(Error) -> Guarantee<T>) -> Guarantee<T> {
+    func recover(on: DispatchQueue? = shareConf.defaultQueue.map,
+                 flags: DispatchWorkItemFlags? = nil,
+                 _ body: @escaping(Error) -> Guarantee<T>)
+    -> Guarantee<T> {
         let rg = Guarantee<T>(.pending)
         pipe {
             switch $0 {
@@ -120,7 +138,7 @@ public extension CatchMixin {
         return rg
     }
 
-    /**
+    /*
      The provided closure executes when this promise resolves, whether it rejects or not.
      
          firstly {
@@ -141,6 +159,8 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
+                // 透传 Result 的值.
+                // 感觉像是 tap.
                 body()
                 rp.box.seal(result)
             }
@@ -230,7 +250,10 @@ public extension CatchMixin where T == Void {
      - Parameter body: The handler to execute if this promise is rejected.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    func recover(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, policy: CatchPolicy = shareConf.catchPolicy, _ body: @escaping(Error) throws -> Void) -> Promise<Void> {
+    func recover(on: DispatchQueue? = shareConf.defaultQueue.map,
+                 flags: DispatchWorkItemFlags? = nil,
+                 policy: CatchPolicy = shareConf.catchPolicy,
+                 _ body: @escaping(Error) throws -> Void) -> Promise<Void> {
         let rg = Promise<Void>(.pending)
         pipe {
             switch $0 {

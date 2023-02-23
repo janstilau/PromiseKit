@@ -197,7 +197,7 @@ public extension Thenable {
      print(response.data)
      }
      */
-    // Donw 返回的是 Promise<Void>, 是一个特殊的类型.
+    // Done 返回的是 Promise<Void>, 是一个特殊的类型.
     // 从业务逻辑上来讲, Void 的 Output 就不应该有后续的 Promise 了, 因为 Void 无法给后续任务带来输入.
     func done(on: DispatchQueue? = shareConf.defaultQueue.return,
               flags: DispatchWorkItemFlags? = nil,

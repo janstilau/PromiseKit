@@ -1,11 +1,14 @@
 import class Foundation.Thread
 import Dispatch
 
-/**
+/*
  A `Guarantee` is a functional abstraction around an asynchronous operation that cannot error.
  - See: `Thenable`
 */
+
+// 这是一个和 Promise 同级的类.
 public final class Guarantee<T>: Thenable {
+    // Box 里面, 装的是 T, 不是 ResultT.
     let box: PromiseKit.Box<T>
 
     fileprivate init(box: SealedBox<T>) {
@@ -25,10 +28,13 @@ public final class Guarantee<T>: Thenable {
 
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
-        pipe{ to(.fulfilled($0)) }
+        pipe{
+            to(.fulfilled($0))
+        }
     }
 
     func pipe(to: @escaping(T) -> Void) {
+        // 这里面的逻辑, 和 Promise 是完全一致的.
         switch box.inspect() {
         case .pending:
             box.inspect {
@@ -71,13 +77,17 @@ public final class Guarantee<T>: Thenable {
 
     /// Returns a tuple of a pending `Guarantee` and a function that resolves it.
     public class func pending() -> (guarantee: Guarantee<T>, resolve: (T) -> Void) {
-        return { ($0, $0.box.seal) }(Guarantee<T>(.pending))
+        let value = Guarantee<T>(.pending)
+        return (value, value.box.seal)
     }
 }
 
 public extension Guarantee {
     @discardableResult
-    func done(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Void) -> Guarantee<Void> {
+    func done(on: DispatchQueue? = shareConf.defaultQueue.return,
+              flags: DispatchWorkItemFlags? = nil,
+              _ body: @escaping(T) -> Void)
+    -> Guarantee<Void> {
         let rg = Guarantee<Void>(.pending)
         pipe { (value: T) in
             on.async(flags: flags) {
@@ -88,14 +98,20 @@ public extension Guarantee {
         return rg
     }
     
-    func get(on: DispatchQueue? = shareConf.defaultQueue.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping (T) -> Void) -> Guarantee<T> {
+    func get(on: DispatchQueue? = shareConf.defaultQueue.return,
+             flags: DispatchWorkItemFlags? = nil,
+             _ body: @escaping (T) -> Void)
+    -> Guarantee<T> {
         return map(on: on, flags: flags) {
             body($0)
             return $0
         }
     }
 
-    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> U) -> Guarantee<U> {
+    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
+                flags: DispatchWorkItemFlags? = nil,
+                _ body: @escaping(T) -> U)
+    -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
             on.async(flags: flags) {
@@ -105,22 +121,14 @@ public extension Guarantee {
         return rg
     }
 
-    #if swift(>=4) && !swift(>=5.2)
-    func map<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T, U>) -> Guarantee<U> {
-        let rg = Guarantee<U>(.pending)
-        pipe { value in
-            on.async(flags: flags) {
-                rg.box.seal(value[keyPath: keyPath])
-            }
-        }
-        return rg
-    }
-    #endif
-
     @discardableResult
-    func then<U>(on: DispatchQueue? = shareConf.defaultQueue.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) -> Guarantee<U>) -> Guarantee<U> {
+    func then<U>(on: DispatchQueue? = shareConf.defaultQueue.map,
+                 flags: DispatchWorkItemFlags? = nil,
+                 _ body: @escaping(T) -> Guarantee<U>)
+    -> Guarantee<U> {
         let rg = Guarantee<U>(.pending)
         pipe { value in
+            // 这里就没有错误的判断了. 
             on.async(flags: flags) {
                 body(value).pipe(to: rg.box.seal)
             }
