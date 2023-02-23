@@ -88,11 +88,9 @@ public extension Thenable {
                     do {
                         let rv = try body(value)
                         guard rv !== rp else { throw PMKError.returnedSelf }
-                        // 在第三方库里面, 经常出现这种直接传递方法的形式, rp.box.seal, 和 { rp.box.seal } 没有任何区别, 强引用
                         // 将两个 Promise 状态进行了触发关联.
                         rv.pipe(to: rp.box.seal)
                     } catch {
-                        // 从这里可以看出, Promise 里面的 Error, 是一个 Void* Error.
                         rp.box.seal(.rejected(error))
                     }
                 }
@@ -101,6 +99,9 @@ public extension Thenable {
                 rp.box.seal(.rejected(error))
             }
         }
+        // 返回的 rp 可以继续 then, 添加自己的回调函数.
+        // rp 可以调用 pipeto, 不过这个函数更多的应该是在框架内部进行调用.
+        // 框架的使用者, 就调用 then, done, catch 这些方法就好了.
         return rp
     }
     
@@ -121,7 +122,6 @@ public extension Thenable {
      //…
      }
      */
-    // Map 就没有中间的 Promise 生成了, 在 Swift 实现里面, 将 then 里面返回 Promise 和返回一个确定的类型分开了.
     func map<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                 flags: DispatchWorkItemFlags? = nil,
                 _ transform: @escaping(T) throws -> U)
@@ -130,10 +130,10 @@ public extension Thenable {
         pipe {
             switch $0 {
             case .fulfilled(let value):
-                // RP 的状态确定在这里就完成了, 没有引入到另外一个 Promise 做关联.
                 // Js 里面, 是由类型判断完成的, 在 Swift 则是由特定的方法有着更加显式地表示.
                 on.async(flags: flags) {
                     do {
+                        // map 的含义, 其实就是 transform.
                         rp.box.seal(.fulfilled(try transform(value)))
                     } catch {
                         rp.box.seal(.rejected(error))
@@ -172,11 +172,10 @@ public extension Thenable {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
+                        // 如果无法获取到值, 直接就当错误处理了, 由下方的 catch 进行处理.
                         if let rv = try transform(value) {
                             rp.box.seal(.fulfilled(rv))
                         } else {
-                            // 这里的 CompactMap 直接当做了错误.
-                            // 和 Combine 一样, 在整个响应联调的内部, 自己处理了 throw.
                             throw PMKError.compactMap(value, U.self)
                         }
                     } catch {
@@ -212,13 +211,16 @@ public extension Thenable {
               flags: DispatchWorkItemFlags? = nil,
               _ body: @escaping(T) throws -> Void)
     -> Promise<Void> {
+        // 这是一种很特殊的初始化方式. 专门用来进行特定领域的初始化的.
+        // 利用编译器的特性, 来固话 init.
         let rp = Promise<Void>(.pending)
         pipe {
             switch $0 {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
-                        // 这里, Body 的结果不会和 Promise 的状态进行关联.
+                        // 直接进行 body 的调用, 后续的节点, 只会获取到 Void Output.
+                        // 不过这还是
                         try body(value)
                         rp.box.seal(.fulfilled(()))
                     } catch {
@@ -253,7 +255,7 @@ public extension Thenable {
      }
      */
     // 在中间安插一个操作, 但是不影响整个数据流转流程.
-    // map 的变体.
+    // 还是有中间节点, 不过中间节点不做数据的处理, 透传了上游的数据.
     func get(on: DispatchQueue? = shareConf.defaultQueue.end,
              flags: DispatchWorkItemFlags? = nil,
              _ body: @escaping (T) throws -> Void) -> Promise<T> {
@@ -278,8 +280,10 @@ public extension Thenable {
              flags: DispatchWorkItemFlags? = nil,
              _ body: @escaping(Result<T>) -> Void)
     -> Promise<T> {
+        // 这里的实现和 JS 是一致的, Promise 的构造函数是同步执行的.
+        // 所以 return Promise init 的同时, 将 resolve return Promise 的逻辑, pipe 到了当前的 Promise 回调里面了.
+        // tap 并不限制 Result 的状态. 所以失败了也会触发.
         return Promise { seal in
-            // 这里的 Pipe 是当前 Promise 调用者的 Pipe, 这里的定义, 和 JS 里面的定义就很像了.
             pipe { result in
                 on.async(flags: flags) {
                     body(result)
@@ -372,21 +376,6 @@ public extension Thenable where T: Sequence {
         return map(on: on, flags: flags){ try $0.map(transform) }
     }
     
-#if swift(>=4) && !swift(>=5.2)
-    /**
-     `Promise<[T]>` => `KeyPath<T, U>` => `Promise<[U]>`
-     
-     firstly {
-     .value([Person(name: "Max"), Person(name: "Roman"), Person(name: "John")])
-     }.mapValues(\.name).done {
-     // $0 => ["Max", "Roman", "John"]
-     }
-     */
-    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U>) -> Promise<[U]> {
-        return map(on: on, flags: flags){ $0.map { $0[keyPath: keyPath] } }
-    }
-#endif
-    
     /**
      `Promise<[T]>` => `T` -> `[U]` => `Promise<[U]>`
      
@@ -417,34 +406,9 @@ public extension Thenable where T: Sequence {
      */
     func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U?) -> Promise<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
-#if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
-            return try foo.flatMap(transform)
-#else
             return try foo.compactMap(transform)
-#endif
         }
     }
-    
-#if swift(>=4) && !swift(>=5.2)
-    /**
-     `Promise<[T]>` => `KeyPath<T, U?>` => `Promise<[U]>`
-     
-     firstly {
-     .value([Person(name: "Max"), Person(name: "Roman", age: 26), Person(name: "John", age: 23)])
-     }.compactMapValues(\.age).done {
-     // $0 => [26, 23]
-     }
-     */
-    func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, U?>) -> Promise<[U]> {
-        return map(on: on, flags: flags) { foo -> [U] in
-#if !swift(>=4.1)
-            return foo.flatMap { $0[keyPath: keyPath] }
-#else
-            return foo.compactMap { $0[keyPath: keyPath] }
-#endif
-        }
-    }
-#endif
     
     /**
      `Promise<[T]>` => `T` -> `Promise<U>` => `Promise<[U]>`
@@ -498,23 +462,6 @@ public extension Thenable where T: Sequence {
             $0.filter(isIncluded)
         }
     }
-    
-#if swift(>=4) && !swift(>=5.2)
-    /**
-     `Promise<[T]>` => `KeyPath<T, Bool>` => `Promise<[T]>`
-     
-     firstly {
-     .value([Person(name: "Max"), Person(name: "Roman", age: 26, isStudent: false), Person(name: "John", age: 23, isStudent: true)])
-     }.filterValues(\.isStudent).done {
-     // $0 => [Person(name: "John", age: 23, isStudent: true)]
-     }
-     */
-    func filterValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T.Iterator.Element, Bool>) -> Promise<[T.Iterator.Element]> {
-        return map(on: on, flags: flags) {
-            $0.filter { $0[keyPath: keyPath] }
-        }
-    }
-#endif
 }
 
 public extension Thenable where T: Collection {

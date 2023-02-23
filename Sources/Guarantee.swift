@@ -7,6 +7,11 @@ import Dispatch
 */
 
 // 这是一个和 Promise 同级的类.
+/*
+ 它也是 Thenable. 所以可以调用 Thenable Extension 中的各个方法.
+ Guarantee 的值向后传递, 中间节点可能出现错误, 所以调用 Thenable Extension 的各个方法还是返回 Promise.
+ 在下面, 如果能够确定中间节点不会出错, 返回值就能变为 Guarantee
+ */
 public final class Guarantee<T>: Thenable {
     // Box 里面, 装的是 T, 不是 ResultT.
     let box: PromiseKit.Box<T>
@@ -35,6 +40,7 @@ public final class Guarantee<T>: Thenable {
 
     func pipe(to: @escaping(T) -> Void) {
         // 这里面的逻辑, 和 Promise 是完全一致的.
+        // 不同的是, Promise 里面存储的是 Result<T>, Guarantee 里面则是 T.
         switch box.inspect() {
         case .pending:
             box.inspect {
@@ -83,6 +89,9 @@ public final class Guarantee<T>: Thenable {
 }
 
 public extension Guarantee {
+    // Get 不会触发 error, 所以可以确定返回的是 Guarantee
+    // Guarantee 和 Thenable 同时定义了这 get 方法, 不同的是 Thenable 中有 throw. 当传入的闭包会 throw 的时候, 返回 Promise, 不然返回 Guarantee
+    // 编译器很强大.
     func get(on: DispatchQueue? = shareConf.defaultQueue.end,
              flags: DispatchWorkItemFlags? = nil,
              _ body: @escaping (T) -> Void)
@@ -93,6 +102,7 @@ public extension Guarantee {
         }
     }
 
+    // 这里的 Map 也是, throws body 进行了返回值的区分.
     func map<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                 flags: DispatchWorkItemFlags? = nil,
                 _ body: @escaping(T) -> U)
@@ -106,8 +116,7 @@ public extension Guarantee {
         return rg
     }
 
-    // Done 的行为就是, body 只是用来执行, 并不用来传递状态.
-    // 后面所有的数据, 只会是 Void.
+    // Done 也根据返回值的不同进行了区分.
     @discardableResult
     func done(on: DispatchQueue? = shareConf.defaultQueue.end,
               flags: DispatchWorkItemFlags? = nil,
@@ -123,8 +132,7 @@ public extension Guarantee {
         return rg
     }
     
-    // Then 如果返回的 Promise. 那么还是走 Thenable 的逻辑. 因为 Promise 是会产生错误的, 所以返回的也就是 Promise, 可以返回错误的.
-    // 如果返回的是 Guarantee, Self 不会产生错误, Body 返回的不会返回错误, 那么 Retunr 的也就不会返回错误.
+    // 根据传入的 Body 返回值不同, 返回 Promise 还是 Guarantee
     @discardableResult
     func then<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                  flags: DispatchWorkItemFlags? = nil,
@@ -156,6 +164,8 @@ public extension Guarantee {
 
         var result = value
 
+        // 将异步操作, 变为了同步获取的办法. 和信号量的获取没有区别. 只不过这里使用了 group 的方式.
+        // Promise 初始化的时候, 就应该触发了异步操作, 等到异步操作结束之后, 触发这里添加的回调, 才能让 Group 解锁.
         if result == nil {
             let group = DispatchGroup()
             group.enter()

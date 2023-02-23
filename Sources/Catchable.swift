@@ -35,11 +35,13 @@ public extension CatchMixin {
                 guard policy == .allErrors || !error.isCancelled else {
                     fallthrough
                 }
+                // 如果 error 了, 触发 body, 然后触发 PMKFinalizer 的 resolve, 进行 finally 中添加的回调触发.
                 on.async(flags: flags) {
                     body(error)
                     finalizer.pending.resolve(())
                 }
             case .fulfilled:
+                // 如果 fulfilled 了, 直接触发 PMKFinalizer 的 resolve, 进行 finally 中添加的回调触发.
                 finalizer.pending.resolve(())
             }
         }
@@ -47,6 +49,7 @@ public extension CatchMixin {
     }
 }
 
+// 这个类, 只能在 Catch 中生成. 所以 finally 只能在 Catch 函数后面调用.
 public class PMKFinalizer {
     let pending = Guarantee<Void>.pending()
 
@@ -86,6 +89,7 @@ public extension CatchMixin {
                               policy: CatchPolicy = shareConf.catchPolicy,
                               _ body: @escaping(Error) throws -> U)
     -> Promise<T> where U.T == T {
+        // 这里, Body 返回的 T 要和原来的一样.
         let rp = Promise<U.T>(.pending)
         pipe {
             switch $0 {
@@ -95,8 +99,7 @@ public extension CatchMixin {
                 if policy == .allErrors || !error.isCancelled {
                     on.async(flags: flags) {
                         do {
-                            // rp 的状态, 除了在 fulfilled 的时候有 self promise 决定.
-                            // 也会在在 Error 的时候, 由新生的 Thenable 决定.
+                            // 和 Combine 的逻辑很相似, 当发生了错误之后, 创建一个新的异步信号节点, 通过该节点, 来完成后续节点状态的确定.
                             let rv = try body(error)
                             guard rv !== rp else { throw PMKError.returnedSelf }
                             rv.pipe(to: rp.box.seal)
@@ -126,6 +129,7 @@ public extension CatchMixin {
                  flags: DispatchWorkItemFlags? = nil,
                  _ body: @escaping(Error) -> Guarantee<T>)
     -> Guarantee<T> {
+        // 当 body 返回的是 Guarantee 的时候, return 类型可以变为 Guarantee
         let rg = Guarantee<T>(.pending)
         pipe {
             switch $0 {
@@ -157,12 +161,14 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensure(on: DispatchQueue? = shareConf.defaultQueue.end, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Void) -> Promise<T> {
+    // then, catch 都是在特定的数据 enum 下才触发, ensure 则是不管数据如何, 触发自己的 Body 逻辑, 然后透传状态.
+    func ensure(on: DispatchQueue? = shareConf.defaultQueue.end,
+                flags: DispatchWorkItemFlags? = nil,
+                _ body: @escaping () -> Void)
+    -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
-                // 透传 Result 的值.
-                // 感觉像是 tap.
                 body()
                 rp.box.seal(result)
             }
@@ -170,7 +176,7 @@ public extension CatchMixin {
         return rp
     }
 
-    /**
+    /*
      The provided closure executes when this promise resolves, whether it rejects or not.
      The chain waits on the returned `Guarantee<Void>`.
 
@@ -188,10 +194,14 @@ public extension CatchMixin {
      - Parameter body: The closure that executes when this promise resolves.
      - Returns: A new promise, resolved with this promise’s resolution.
      */
-    func ensureThen(on: DispatchQueue? = shareConf.defaultQueue.end, flags: DispatchWorkItemFlags? = nil, _ body: @escaping () -> Guarantee<Void>) -> Promise<T> {
+    func ensureThen(on: DispatchQueue? = shareConf.defaultQueue.end,
+                    flags: DispatchWorkItemFlags? = nil,
+                    _ body: @escaping () -> Guarantee<Void>)
+    -> Promise<T> {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
+                // ensure 具有了异步操作的特性了.
                 body().done {
                     rp.box.seal(result)
                 }
@@ -214,7 +224,7 @@ public extension CatchMixin {
     }
 }
 
-
+// 只有原本的 Promise 都是 Voide 的时候, 才能调用. 
 public extension CatchMixin where T == Void {
     
     /**
@@ -231,6 +241,7 @@ public extension CatchMixin where T == Void {
                  flags: DispatchWorkItemFlags? = nil,
                  _ body: @escaping(Error) -> Void)
     -> Guarantee<Void> {
+        
         let rg = Guarantee<Void>(.pending)
         pipe {
             switch $0 {

@@ -9,22 +9,20 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
 
     let rp = Promise<Void>(.pending)
 
-#if PMKDisableProgress || os(Linux)
-    var progress: (completedUnitCount: Int, totalUnitCount: Int) = (0, 0)
-#else
     let progress = Progress(totalUnitCount: Int64(thenables.count))
     progress.isCancellable = false
     progress.isPausable = false
-#endif
 
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
 
     for promise in thenables {
         promise.pipe { result in
+            // 各个 Primise 自然是自己触发各自的异步操作, 只不过汇总的时候, 需要加锁.
             barrier.sync(flags: .barrier) {
                 switch result {
                 case .rejected(let error):
                     if rp.isPending {
+                        // 如果有一个出错了, 总的 Rp 就认为出错了.
                         progress.completedUnitCount = progress.totalUnitCount
                         rp.box.seal(.rejected(error))
                     }
@@ -51,13 +49,9 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
 
     let rg = Guarantee<Void>(.pending)
 
-#if PMKDisableProgress || os(Linux)
-    var progress: (completedUnitCount: Int, totalUnitCount: Int) = (0, 0)
-#else
     let progress = Progress(totalUnitCount: Int64(guarantees.count))
     progress.isCancellable = false
     progress.isPausable = false
-#endif
 
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
 
