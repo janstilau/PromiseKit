@@ -33,6 +33,7 @@ Pod::Spec.new do |s|
     'OTHER_SWIFT_FLAGS' => '-DPMKCocoaPods',
   }
 
+  #   原来在 Extensions 里面, 定义了这么多的 Promise 的封装方法. 
   s.subspec 'Accounts' do |ss|
     ss.ios.source_files = ss.osx.source_files = 'Extensions/Accounts/Sources/**/*'
     ss.exclude_files = 'Extensions/Accounts/Sources/*.plist'

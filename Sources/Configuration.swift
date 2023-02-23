@@ -9,7 +9,9 @@ import Dispatch
 */
 public struct PMKConfiguration {
     /// The default queues that promises handlers dispatch to
-    public var Q: (map: DispatchQueue?, return: DispatchQueue?) = (map: DispatchQueue.main, return: DispatchQueue.main)
+    // 默认, 是使用了主线程.
+    public var defaultQueue: (map: DispatchQueue?, return: DispatchQueue?) = (map: DispatchQueue.main,
+                                                                   return: DispatchQueue.main)
 
     /// The default catch-policy for all `catch` and `resolve`
     public var catchPolicy = CatchPolicy.allErrorsExceptCancellation
@@ -32,4 +34,4 @@ public struct PMKConfiguration {
 }
 
 /// Modify this as soon as possible in your application’s lifetime
-public var conf = PMKConfiguration()
+public var shareConf = PMKConfiguration()

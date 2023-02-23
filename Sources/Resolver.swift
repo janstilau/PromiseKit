@@ -1,34 +1,38 @@
 /// An object for resolving promises
+// 专门定义了一个类, 来完成 Promise 内部的状态改变.
+// 状态改变, 已经被封装到了 Box 类的内部了.
+// 所以, 这个 Resolver 可以看做是 box 的工具类.
 public final class Resolver<T> {
     let box: Box<Result<T>>
-
+    
     init(_ box: Box<Result<T>>) {
         self.box = box
     }
-
+    
     deinit {
         if case .pending = box.inspect() {
-            conf.logHandler(.pendingPromiseDeallocated)
+            shareConf.logHandler(.pendingPromiseDeallocated)
         }
     }
 }
 
+// 提供了更加方便的方法, 去调用 box 的 seal 方法.
 public extension Resolver {
     /// Fulfills the promise with the provided value
     func fulfill(_ value: T) {
         box.seal(.fulfilled(value))
     }
-
+    
     /// Rejects the promise with the provided error
     func reject(_ error: Error) {
         box.seal(.rejected(error))
     }
-
+    
     /// Resolves the promise with the provided result
     func resolve(_ result: Result<T>) {
         box.seal(result)
     }
-
+    
     /// Resolves the promise with the provided value or error
     func resolve(_ obj: T?, _ error: Error?) {
         if let error = error {
@@ -39,7 +43,7 @@ public extension Resolver {
             reject(PMKError.invalidCallingConvention)
         }
     }
-
+    
     /// Fulfills the promise with the provided value unless the provided error is non-nil
     func resolve(_ obj: T, _ error: Error?) {
         if let error = error {
@@ -48,7 +52,7 @@ public extension Resolver {
             fulfill(obj)
         }
     }
-
+    
     /// Resolves the promise, provided for non-conventional value-error ordered completion handlers.
     func resolve(_ error: Error?, _ obj: T?) {
         resolve(obj, error)
@@ -67,7 +71,7 @@ extension Resolver where T == Void {
     }
 #if false
     // disabled ∵ https://github.com/mxcl/PromiseKit/issues/990
-
+    
     /// Fulfills the promise
     public func fulfill() {
         self.fulfill(())
@@ -94,12 +98,16 @@ extension Resolver {
 }
 #endif
 
-// 这个 Result, 和 Swfit 是完全不一样的. 
+// 这个 Result, 和 Swfit 是完全不一样的.
+//  enum Result<Success, Failure> where Failure : Error 这是 Swift 的 Result 的定义, 可以看到还是明显不同的.
 public enum Result<T> {
     case fulfilled(T)
+    // 和 Swfit 的 Result 不同, PromiseKit 里面的 Result 没有对于 Error 的限制.
+    // 这也就意味着, Promise 里面, Catch 面对的是一个 Void* 的 Error 类型.
     case rejected(Error)
 }
 
+// 这是合理的定义方式, Enum 要伴随着大量的计算属性, 根据自身的状态来返回合理的业务值.
 public extension PromiseKit.Result {
     var isFulfilled: Bool {
         switch self {

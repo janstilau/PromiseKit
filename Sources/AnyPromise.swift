@@ -63,7 +63,7 @@ import Foundation
 
     @objc public func __wait() -> Any? {
         if Thread.isMainThread {
-            conf.logHandler(.waitOnMainThread)
+            shareConf.logHandler(.waitOnMainThread)
         }
         
         var result = __value
