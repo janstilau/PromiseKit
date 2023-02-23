@@ -1,8 +1,7 @@
 import Dispatch
 
 /// Provides `catch` and `recover` to your object that conforms to `Thenable`
-public protocol CatchMixin: Thenable
-{}
+public protocol CatchMixin: Thenable {}
 
 public extension CatchMixin {
     

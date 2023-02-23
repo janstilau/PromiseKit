@@ -35,6 +35,7 @@ typedef void (^PMKResolver)(id __nullable) NS_REFINED_FOR_SWIFT;
 
 
 /// INTERNAL DO NOT USE
+// 奇怪的写法. 
 - (instancetype __nonnull)initWith__D:(__AnyPromise * __nonnull)d;
 
 /**

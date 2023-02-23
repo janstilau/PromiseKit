@@ -94,6 +94,7 @@ extension Resolver {
 }
 #endif
 
+// 这个 Result, 和 Swfit 是完全不一样的. 
 public enum Result<T> {
     case fulfilled(T)
     case rejected(Error)

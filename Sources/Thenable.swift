@@ -9,6 +9,7 @@ public protocol Thenable: AnyObject {
     func pipe(to: @escaping(Result<T>) -> Void)
 
     /// The resolved result or nil if pending.
+    // Optional + Result 表示了: 没有值, 有值错误, 有值正确三种状态. 
     var result: Result<T>? { get }
 }
 
@@ -21,7 +22,7 @@ public extension Thenable {
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that executes when this promise is fulfilled. It must return a promise.
      - Returns: A new promise that resolves when the promise returned from the provided closure resolves. For example:
-
+ 
            firstly {
                URLSession.shared.dataTask(.promise, with: url1)
            }.then { response in
@@ -30,10 +31,12 @@ public extension Thenable {
                //…
            }
      */
+    // 这里的实现逻辑, 其实和 JS 版本没有什么不同.
     func then<U: Thenable>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) throws -> U) -> Promise<U.T> {
         let rp = Promise<U.T>(.pending)
         pipe {
             switch $0 {
+                
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
@@ -68,6 +71,7 @@ public extension Thenable {
                //…
            }
      */
+    // Map 就没有中间的 Promise 生成了, 在 Swift 实现里面, 将 then 里面返回 Promise 和返回一个确定的类型分开了.
     func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T) throws -> U) -> Promise<U> {
         let rp = Promise<U>(.pending)
         pipe {
@@ -87,31 +91,7 @@ public extension Thenable {
         return rp
     }
 
-    #if swift(>=4) && !swift(>=5.2)
-    /**
-     Similar to func `map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T) throws -> U) -> Promise<U>`, but accepts a key path instead of a closure.
-     
-     - Parameter on: The queue to which the provided key path for value dispatches.
-     - Parameter keyPath: The key path to the value that is using when this Promise is fulfilled.
-     - Returns: A new promise that is fulfilled with the value for the provided key path.
-     */
-    func map<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T, U>) -> Promise<U> {
-        let rp = Promise<U>(.pending)
-        pipe {
-            switch $0 {
-            case .fulfilled(let value):
-                on.async(flags: flags) {
-                    rp.box.seal(.fulfilled(value[keyPath: keyPath]))
-                }
-            case .rejected(let error):
-                rp.box.seal(.rejected(error))
-            }
-        }
-        return rp
-    }
-    #endif
-
-    /**
+    /*
       The provided closure is executed when this promise is fulfilled.
 
       In your closure return an `Optional`, if you return `nil` the resulting promise is rejected with `PMKError.compactMap`, otherwise the promise is fulfilled with the unwrapped value.
@@ -149,38 +129,6 @@ public extension Thenable {
         return rp
     }
 
-    #if swift(>=4) && !swift(>=5.2)
-    /**
-    Similar to func `compactMap<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T) throws -> U?) -> Promise<U>`, but accepts a key path instead of a closure.
-    
-    - Parameter on: The queue to which the provided key path for value dispatches.
-    - Parameter keyPath: The key path to the value that is using when this Promise is fulfilled. If the value for `keyPath` is `nil` the resulting promise is rejected with `PMKError.compactMap`.
-    - Returns: A new promise that is fulfilled with the value for the provided key path.
-    */
-    func compactMap<U>(on: DispatchQueue? = conf.Q.map, flags: DispatchWorkItemFlags? = nil, _ keyPath: KeyPath<T, U?>) -> Promise<U> {
-        let rp = Promise<U>(.pending)
-        pipe {
-            switch $0 {
-            case .fulfilled(let value):
-                on.async(flags: flags) {
-                    do {
-                        if let rv = value[keyPath: keyPath] {
-                            rp.box.seal(.fulfilled(rv))
-                        } else {
-                            throw PMKError.compactMap(value, U.self)
-                        }
-                    } catch {
-                        rp.box.seal(.rejected(error))
-                    }
-                }
-            case .rejected(let error):
-                rp.box.seal(.rejected(error))
-            }
-        }
-        return rp
-    }
-    #endif
-
     /**
      The provided closure is executed when this promise is fulfilled.
      
@@ -197,6 +145,8 @@ public extension Thenable {
                print(response.data)
            }
      */
+    // Donw 返回的是 Promise<Void>, 是一个特殊的类型.
+    //
     func done(on: DispatchQueue? = conf.Q.return, flags: DispatchWorkItemFlags? = nil, _ body: @escaping(T) throws -> Void) -> Promise<Void> {
         let rp = Promise<Void>(.pending)
         pipe {

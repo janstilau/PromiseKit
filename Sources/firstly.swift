@@ -1,6 +1,7 @@
 import Dispatch
 
 /**
+ // 明智的；头脑精明的；判断正确的 Judicious
  Judicious use of `firstly` *may* make chains more readable.
 
  Compare:
