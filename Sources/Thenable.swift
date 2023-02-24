@@ -73,6 +73,7 @@ public extension Thenable {
      */
     // 这里的实现逻辑, 其实和 JS 版本没有什么不同.
     // 实际上, 连接异步操作的行为, 是直接定义在了 Thenable 的内部了.
+    // 相比较 JS 里面的实现, 每一个 API 其实都进行调度的环境可配置项.
     func then<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.processing,
                            flags: DispatchWorkItemFlags? = nil,
                            _ body: @escaping(T) throws -> U)
@@ -82,6 +83,7 @@ public extension Thenable {
         // 被返回的 RP 的状态, 就在这个回调里面被 Resolved.
         pipe {
             // $0 是当前的 Promise 的 Result 值.
+            // pipe 的参数回调, 只会在 Promise Resolved
             switch $0 {
             case .fulfilled(let value):
                 on.async(flags: flags) {
@@ -96,11 +98,13 @@ public extension Thenable {
                 }
             case .rejected(let error):
                 // 如果上一个 Promise 已经发生了错误, 直接透传到下一个 Promise.
+                // 这样就实现了透传的效果了.
+                // 在 Catchable 里面, 相关的方法在 Fulfilled 的时候, 也是透传.
                 rp.box.seal(.rejected(error))
             }
         }
         // 返回的 rp 可以继续 then, 添加自己的回调函数.
-        // rp 可以调用 pipeto, 不过这个函数更多的应该是在框架内部进行调用.
+        // rp 可以调用 pipeto 函数, 不过这个函数更多的应该是在框架内部进行调用.
         // 框架的使用者, 就调用 then, done, catch 这些方法就好了.
         return rp
     }
@@ -134,6 +138,8 @@ public extension Thenable {
                 on.async(flags: flags) {
                     do {
                         // map 的含义, 其实就是 transform.
+                        // 没有触发新的一步操作, 拿到上游的值, 变换之后用来确定 rp 的结果.
+                        // 触发后续 rp 注册的众多回调.
                         rp.box.seal(.fulfilled(try transform(value)))
                     } catch {
                         rp.box.seal(.rejected(error))
@@ -259,6 +265,7 @@ public extension Thenable {
     func get(on: DispatchQueue? = shareConf.defaultQueue.end,
              flags: DispatchWorkItemFlags? = nil,
              _ body: @escaping (T) throws -> Void) -> Promise<T> {
+        // 使用了 Map 这个已有的实现. 在 MAP 的 transform 里面, 触发了业务操作, 然后透传传递过来的值.
         return map(on: on, flags: flags) {
             try body($0)
             return $0
