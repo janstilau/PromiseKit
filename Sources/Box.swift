@@ -13,7 +13,7 @@ final class Handlers<R> {
     func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
 }
 
-/// - Remark: not protocol ∵ http://www.russbishop.net/swift-associated-types-cont
+// - Remark: not protocol ∵ http://www.russbishop.net/swift-associated-types-cont
 // 在 Promise 的定义里面, 是这样的 Box Box<Result<T>>
 class Box<T> {
     func inspect() -> Sealant<T> { fatalError() }
@@ -49,6 +49,15 @@ class EmptyBox<T>: Box<T> {
          Once the barrier work item finishes, the queue returns to scheduling work items that were submitted after the barrier.
          */
         barrier.sync(flags: .barrier) {
+// 直接使用这种方式, 会有编译错误.
+//            if sealant == .pending {
+//                print("可以这样判断")
+//            }
+// 如果想要不做提取, 直接使用 case 进行判断, 要使用这个特殊的形式.
+//            if case .pending = sealant {
+//                return
+//            }
+
             guard case .pending(let _handlers) = self.sealant else {
                 return  // already fulfilled!
             }
