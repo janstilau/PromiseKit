@@ -1,16 +1,17 @@
 import Dispatch
 
+// 将, 回调这回事使用一个特定的类进行了存储.
+// 这是一个引用类型.
+// 这个类型, 只会在 Sealant.pending中使用
+final class Handlers<R> {
+    var bodies: [(R) -> Void] = []
+    func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
+}
+
 // 将状态, 回调, 结果使用 Swfit Enum 这种方式进行了存储, 更加的显式.
 enum Sealant<R> {
     case pending(Handlers<R>) // 还没有 resolved, 这个时候, 存储了众多处理 Result 值的回调.
     case resolved(R) // 已经 Resolve 了, 这时候, 存储了最终的这个 Result 值.
-}
-
-// 将, 回调这回事使用一个特定的类进行了存储.
-// 这是一个引用类型.
-final class Handlers<R> {
-    var bodies: [(R) -> Void] = []
-    func append(_ item: @escaping(R) -> Void) { bodies.append(item) }
 }
 
 // - Remark: not protocol ∵ http://www.russbishop.net/swift-associated-types-cont
@@ -49,15 +50,15 @@ class EmptyBox<T>: Box<T> {
          Once the barrier work item finishes, the queue returns to scheduling work items that were submitted after the barrier.
          */
         barrier.sync(flags: .barrier) {
-// 直接使用这种方式, 会有编译错误.
-//            if sealant == .pending {
-//                print("可以这样判断")
-//            }
-// 如果想要不做提取, 直接使用 case 进行判断, 要使用这个特殊的形式.
-//            if case .pending = sealant {
-//                return
-//            }
-
+            // 直接使用这种方式, 会有编译错误.
+            //            if sealant == .pending {
+            //                print("可以这样判断")
+            //            }
+            // 如果想要不做提取, 直接使用 case 进行判断, 要使用这个特殊的形式.
+            //            if case .pending = sealant {
+            //                return
+            //            }
+            
             guard case .pending(let _handlers) = self.sealant else {
                 return  // already fulfilled!
             }
@@ -65,6 +66,7 @@ class EmptyBox<T>: Box<T> {
             self.sealant = .resolved(value)
         }
         
+        // 将, 封存状态然后调用存储闭包的逻辑, 写到了 Box 的内部. 
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }

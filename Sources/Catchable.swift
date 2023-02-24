@@ -3,6 +3,8 @@ import Dispatch
 /// Provides `catch` and `recover` to your object that conforms to `Thenable`
 public protocol CatchMixin: Thenable {}
 
+// 之所以将 Catch 进行了抽离, 是因为 Guarantee 是没有 Catch 的能力的.
+// 将两个抽象类进行分离, 让代码的更加分离. 
 public extension CatchMixin {
     
     /*

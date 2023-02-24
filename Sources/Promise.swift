@@ -5,7 +5,8 @@ import Dispatch
  A `Promise` is a functional abstraction around a failable asynchronous operation.
  - See: `Thenable`
  */
-public final class Promise<T>: Thenable, CatchMixin {
+public final class Promise<T>: CatchMixin {
+    // 使用抽象数据类型, 真正的 box 会是 EmptyBox 和 SealedBox 两种.
     let box: Box<Result<T>>
     
     fileprivate init(box: SealedBox<Result<T>>) {
@@ -34,6 +35,13 @@ public final class Promise<T>: Thenable, CatchMixin {
         }
     }
     
+    
+    init(_: PMKUnambiguousInitializer) {
+        box = EmptyBox()
+    }
+}
+
+extension Promise: Thenable {
     /// - See: `Thenable.pipe`
     public func pipe(to: @escaping(Result<T>) -> Void) {
         /*
@@ -45,7 +53,7 @@ public final class Promise<T>: Thenable, CatchMixin {
         case .pending:
             box.inspect {
                 switch $0 {
-                case .pending(let handlers):
+                case .pending(let handlers): // handler 是一个引用类型, 所以这里取值出来没有问题. 并且这是在加锁的状态, 修改引用类型里面的数据, 是线程安全的.
                     handlers.append(to)
                 case .resolved(let value):
                     to(value)
@@ -65,14 +73,10 @@ public final class Promise<T>: Thenable, CatchMixin {
             return result
         }
     }
-    
-    init(_: PMKUnambiguousInitializer) {
-        box = EmptyBox()
-    }
 }
 
 extension Promise {
-    /**
+    /*
      Initialize a new fulfilled promise.
      
      We do not provide `init(value:)` because Swift is “greedy”
@@ -189,6 +193,7 @@ public enum PMKNamespacer {
 }
 
 // 一个特殊的类型, 用作 trait.
+// Promise<T>(.pending) 就是调用的这里.
 enum PMKUnambiguousInitializer {
     case pending
 }

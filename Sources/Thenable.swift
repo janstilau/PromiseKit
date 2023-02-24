@@ -5,8 +5,8 @@ import Dispatch
  */
 /*
  Thenable
- 1. 可以添加一个回调, 这个回调是当我状态确定的时候一定会执行, 参数是我当前的状态值.
- 2. 可以返回我当前的状态.
+ 1. 可以添加一个回调, 这个回调是当我状态确定的时候一定会执行, 参数是我当前的状态值. func pipe(to: @escaping(Result<T>) -> Void)
+ 2. 可以返回我当前的状态. var result: Result<T>? { get }
  
  如果.
  给我添加了一个回调, 这个回调里面我将自身 Result 产生了另外一个值, 这个值用来决定另外的一个 Promise 的状态.
@@ -347,7 +347,7 @@ public extension Thenable {
     /**
      - Returns: The value with which this promise was fulfilled or `nil` if this promise is pending or rejected.
      */
-    // 抽取 fulfilled 下的 value 值. 
+    // 抽取 fulfilled 下的 value 值.
     var value: T? {
         switch result {
         case .none:

@@ -9,13 +9,12 @@ import Dispatch
 - Returns: A guarantee that resolves after the specified duration.
 */
 public func after(seconds: TimeInterval) -> Guarantee<Void> {
+    // 为什么会出现 pending() 这个函数在这里体现出来了.
+    // 快速的定义一个 Thenable, 提供 seal 接口进行状态的封存.
+    // 这种方式, 比使用构造方法进行 Thenable 的创建要好的多. 
     let (rg, seal) = Guarantee<Void>.pending()
     let when = DispatchTime.now() + seconds
-#if swift(>=4.0)
     theQueue.asyncAfter(deadline: when) { seal(()) }
-#else
-    theQueue.asyncAfter(deadline: when, execute: seal)
-#endif
     return rg
 }
 

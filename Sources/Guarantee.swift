@@ -12,6 +12,7 @@ import Dispatch
  Guarantee 的值向后传递, 中间节点可能出现错误, 所以调用 Thenable Extension 的各个方法还是返回 Promise.
  在下面, 如果能够确定中间节点不会出错, 返回值就能变为 Guarantee
  */
+// Guarantee 表示一定不会发生错误, 不保证, 一定会 resolved. 上游节点一直不进行自己状态的 Resolve, 下游会处于停滞状态. 
 public final class Guarantee<T>: Thenable {
     // Box 里面, 装的是 T, 不是 ResultT.
     let box: PromiseKit.Box<T>
