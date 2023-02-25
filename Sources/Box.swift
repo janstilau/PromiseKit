@@ -66,7 +66,7 @@ class EmptyBox<T>: Box<T> {
             self.sealant = .resolved(value)
         }
         
-        // 将, 封存状态然后调用存储闭包的逻辑, 写到了 Box 的内部. 
+        // 将, 封存状态然后调用存储闭包的逻辑, 写到了 Box 的内部.
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }

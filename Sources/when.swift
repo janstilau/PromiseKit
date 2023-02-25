@@ -1,6 +1,11 @@
 import Foundation
 import Dispatch
 
+/*
+ When 提供的都是, 当传入的 Promise 都完成了之后, 产出的一个 Promise<[Result]>
+ */
+
+// 没有关于 Output 的限制. 这里就是在等待, 所有的 Promise 完成之后的一个事件而已.
 private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
     var countdown = thenables.count
     guard countdown > 0 else {
@@ -9,12 +14,7 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
 
     let rp = Promise<Void>(.pending)
 
-    let progress = Progress(totalUnitCount: Int64(thenables.count))
-    progress.isCancellable = false
-    progress.isPausable = false
-
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
-
     for promise in thenables {
         promise.pipe { result in
             // 各个 Primise 自然是自己触发各自的异步操作, 只不过汇总的时候, 需要加锁.
@@ -23,12 +23,12 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
                 case .rejected(let error):
                     if rp.isPending {
                         // 如果有一个出错了, 总的 Rp 就认为出错了.
-                        progress.completedUnitCount = progress.totalUnitCount
+                        // barrier 已经确定了, 一定是在锁的环境了.
+                        // rp 里面的加锁, 是 rp 的机制, 这里不会有死锁的问题.
                         rp.box.seal(.rejected(error))
                     }
                 case .fulfilled:
                     guard rp.isPending else { return }
-                    progress.completedUnitCount += 1
                     countdown -= 1
                     if countdown == 0 {
                         rp.box.seal(.fulfilled(()))
@@ -48,18 +48,12 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
     }
 
     let rg = Guarantee<Void>(.pending)
-
-    let progress = Progress(totalUnitCount: Int64(guarantees.count))
-    progress.isCancellable = false
-    progress.isPausable = false
-
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
 
     for guarantee in guarantees {
         guarantee.pipe { (_: T) in
             barrier.sync(flags: .barrier) {
                 guard rg.isPending else { return }
-                progress.completedUnitCount += 1
                 countdown -= 1
                 if countdown == 0 {
                     rg.box.seal(())
@@ -94,6 +88,7 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
  - Note: `when` provides `NSProgress`.
  - SeeAlso: `when(resolved:)`
 */
+// AllPromise 的实现.
 public func when<U: Thenable>(fulfilled thenables: [U]) -> Promise<[U.T]> {
     return _when(thenables).map(on: nil) { thenables.map{ $0.value! } }
 }
@@ -107,6 +102,11 @@ public func when<U: Thenable>(fulfilled promises: U...) -> Promise<Void> where U
 public func when<U: Thenable>(fulfilled promises: [U]) -> Promise<Void> where U.T == Void {
     return _when(promises)
 }
+
+/*
+ When 只是达到了, 所有的都完成了这一事件的监听.
+ 想要获取到里面的值, 还需要专门的进行一次抽取.
+ */
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable, V: Thenable>(fulfilled pu: U, _ pv: V) -> Promise<(U.T, V.T)> {
@@ -140,6 +140,10 @@ public func when<U: Thenable, V: Thenable, W: Thenable, X: Thenable, Y: Thenable
      let urls: [URL] = /*…*/
      let urlGenerator = urls.makeIterator()
 
+ /*
+  AnyIterator 中传入的闭包, 当做 next 方法的实现.
+  */
+ // 每次迭代的时候, 才进行 Promise 的创建.
      let generator = AnyIterator<Promise<Data>> {
          guard url = urlGenerator.next() else {
              return nil
@@ -160,56 +164,58 @@ public func when<U: Thenable, V: Thenable, W: Thenable, X: Thenable, Y: Thenable
  - SeeAlso: `when(resolved:)`
  */
 
-public func when<It: IteratorProtocol>(fulfilled promiseIterator: It, concurrently: Int) -> Promise<[It.Element.T]> where It.Element: Thenable {
+public func when<It: IteratorProtocol>(fulfilled promiseIterator: It,
+                                       concurrently: Int) ->
+Promise<[It.Element.T]> where It.Element: Thenable {
 
     guard concurrently > 0 else {
         return Promise(error: PMKError.badInput)
     }
 
     var generator = promiseIterator
-    let root = Promise<[It.Element.T]>.pending()
-    var pendingPromises = 0
+    var runningCount = 0
     var promises: [It.Element] = []
 
-    let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: [.concurrent])
+    let barrier = DispatchQueue(label: "org.promisekit.barrier.when",
+                                attributes: [.concurrent])
 
+    // Swift 这种, 定义一个 Promise 对象, 然后使用 resolve 操作里面状态的做法, 让人更加容易理解.
+    let root = Promise<[It.Element.T]>.pending()
     func dequeue() {
         guard root.promise.isPending else { return }  // don’t continue dequeueing if root has been rejected
 
         var shouldDequeue = false
         barrier.sync {
-            shouldDequeue = pendingPromises < concurrently
+            shouldDequeue = runningCount < concurrently
         }
         guard shouldDequeue else { return }
 
-        var promise: It.Element!
+        var _nextPromise: It.Element!
 
         barrier.sync(flags: .barrier) {
-            guard let next = generator.next() else { return }
-            promise = next
-            pendingPromises += 1
-            promises.append(next)
+            guard let nextPromise = generator.next() else { return }
+            _nextPromise = nextPromise
+            runningCount += 1
+            promises.append(nextPromise)
         }
 
         func testDone() {
             barrier.sync {
-                if pendingPromises == 0 {
-                  #if !swift(>=3.3) || (swift(>=4) && !swift(>=4.1))
-                    root.resolver.fulfill(promises.flatMap{ $0.value })
-                  #else
+                if runningCount == 0 {
                     root.resolver.fulfill(promises.compactMap{ $0.value })
-                  #endif
                 }
             }
         }
 
-        guard promise != nil else {
+        // 如果娶不到了, 就判断一下, 是不是结束了.
+        guard _nextPromise != nil else {
             return testDone()
         }
 
-        promise.pipe { resolution in
+        _nextPromise.pipe { resolution in
+            // 状态量的变化.
             barrier.sync(flags: .barrier) {
-                pendingPromises -= 1
+                runningCount -= 1
             }
 
             switch resolution {
@@ -267,6 +273,7 @@ public func when<T>(resolved promises: [Promise<T>]) -> Guarantee<[Result<T>]> {
             }
             barrier.sync {
                 if countdown == 0 {
+                    // 当这个时候之后, promises中每个promise都有 result 了, 直接取 Result 就可以了.
                     rg.box.seal(promises.map{ $0.result! })
                 }
             }
@@ -307,7 +314,8 @@ No more than three downloads will occur simultaneously. Downloads will continue 
 - SeeAlso: `when(resolved:)`
 */
 #if swift(>=5.3)
-public func when<It: IteratorProtocol>(resolved promiseIterator: It, concurrently: Int)
+public func when<It: IteratorProtocol>(resolved promiseIterator: It,
+                                       concurrently: Int)
     -> Guarantee<[Result<It.Element.T>]> where It.Element: Thenable {
     guard concurrently > 0 else {
         return Guarantee.value([Result.rejected(PMKError.badInput)])

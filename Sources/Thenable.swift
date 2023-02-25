@@ -49,6 +49,10 @@ public protocol Thenable: AnyObject {
 
 // 本来 func pipe(to: @escaping(Result<T>) -> Void) 只是添加 Resolved 回调.
 // 经过下面 wrapper 方法的各种加工,
+
+// 各个闭包参数, 都是 Throws 的参数. 在各个函数内部进行了 try 的捕获
+// 在捕获的 catch 里面, 进行了 reject. 正是因为如此, Thenable 里面 catch 面对的是 通用 error, 因为具体的错误类型, 会随着闭包的不同而不同.
+// 这也是 Combine 里面, 错误一旦有了 try 的节点掺入, 错误处理都会变为 Error 类型.
 public extension Thenable {
     /*
      The provided closure executes when this promise is fulfilled.
@@ -93,6 +97,7 @@ public extension Thenable {
                         // 将两个 Promise 状态进行了触发关联.
                         rv.pipe(to: rp.box.seal)
                     } catch {
+                        // 如果 Self Promise 发生了错误, 直接就 Rp 的状态就认为是错误.
                         rp.box.seal(.rejected(error))
                     }
                 }
@@ -367,6 +372,8 @@ public extension Thenable {
     }
 }
 
+// 如果, Promise 里面的数据是一个数组的时候, 有着更加特殊的操作.
+// 有点过度设计吧, 自己 map 一下也没事的.
 public extension Thenable where T: Sequence {
     /**
      `Promise<[T]>` => `T` -> `U` => `Promise<[U]>`
@@ -379,7 +386,11 @@ public extension Thenable where T: Sequence {
      // $0 => [2,4,6]
      }
      */
-    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U]> {
+    func mapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing,
+                      flags: DispatchWorkItemFlags? = nil,
+                      _ transform: @escaping(T.Iterator.Element) throws -> U)
+    -> Promise<[U]> {
+        // 这种, 直接传递闭包参数的形式, 更加的体现了, 将闭包当做参数传递的概念.
         return map(on: on, flags: flags){ try $0.map(transform) }
     }
     
@@ -428,8 +439,11 @@ public extension Thenable where T: Sequence {
      // $0 => [2,4,6]
      }
      */
-    func thenMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.T]> {
+    func thenMap<U: Thenable>(on: DispatchQueue? = shareConf.defaultQueue.processing,
+                              flags: DispatchWorkItemFlags? = nil,
+                              _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.T]> {
         return then(on: on, flags: flags) {
+            // 这里, try 的 catch, 是 then 里面的逻辑. 
             when(fulfilled: try $0.map(transform))
         }
     }

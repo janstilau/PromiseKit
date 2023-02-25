@@ -31,6 +31,8 @@ public extension CatchMixin {
                  policy: CatchPolicy = shareConf.catchPolicy,
                  _ body: @escaping(Error) -> Void) -> PMKFinalizer {
         let finalizer = PMKFinalizer()
+        // catch 中, 保证了生成的 finalizer 中的 Thenable 一定会触发状态 Resolve. 而 Finnally 则是在这个 Thenable 中添加回调.
+        // 所以 finally 里面的内容, 一定会触发.
         pipe {
             switch $0 {
             case .rejected(let error):
