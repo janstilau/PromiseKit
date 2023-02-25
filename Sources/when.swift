@@ -14,6 +14,9 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
 
     let rp = Promise<Void>(.pending)
 
+    // 这里的思路, 和自己写没有太大的区别.
+    // 都是在结果函数里面, 进行 count 值的比对.
+    // 并且要有加锁相关的处理.
     let barrier = DispatchQueue(label: "org.promisekit.barrier.when", attributes: .concurrent)
     for promise in thenables {
         promise.pipe { result in
@@ -54,6 +57,7 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
         guarantee.pipe { (_: T) in
             barrier.sync(flags: .barrier) {
                 guard rg.isPending else { return }
+                // 相比较 pormise, Guarantee 里面直接是 fulfilled 状况的判断, 没有 error 的判断.
                 countdown -= 1
                 if countdown == 0 {
                     rg.box.seal(())
@@ -90,6 +94,9 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
 */
 // AllPromise 的实现.
 public func when<U: Thenable>(fulfilled thenables: [U]) -> Promise<[U.T]> {
+    // thenables.map 中的 map, 是 Sequence 里面的 map.
+    // _when 返回的 Promise 能够 fulfilled, 就代表着 thenables 里面都有值了.
+    // 这个时候, 就能够使用 value 来获取里面的值了.
     return _when(thenables).map(on: nil) { thenables.map{ $0.value! } }
 }
 

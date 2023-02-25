@@ -306,6 +306,8 @@ public extension Thenable {
     }
     
     /// - Returns: a new promise chained off this promise but with its value discarded.
+    // asVoid 在 when 里面用的比较多, 它的含义是, 当 Promise 完结的时候.
+    // 所以如果我们想要完成某些事情的时机, 使用 asVoid 就可以.
     func asVoid() -> Promise<Void> {
         return map(on: nil) { _ in }
     }
@@ -375,7 +377,7 @@ public extension Thenable {
 // 如果, Promise 里面的数据是一个数组的时候, 有着更加特殊的操作.
 // 有点过度设计吧, 自己 map 一下也没事的.
 public extension Thenable where T: Sequence {
-    /**
+    /*
      `Promise<[T]>` => `T` -> `U` => `Promise<[U]>`
      
      firstly {
@@ -391,6 +393,7 @@ public extension Thenable where T: Sequence {
                       _ transform: @escaping(T.Iterator.Element) throws -> U)
     -> Promise<[U]> {
         // 这种, 直接传递闭包参数的形式, 更加的体现了, 将闭包当做参数传递的概念.
+        // $0 这个时候, 是 Sequence 类型的.
         return map(on: on, flags: flags){ try $0.map(transform) }
     }
     
@@ -424,6 +427,7 @@ public extension Thenable where T: Sequence {
      */
     func compactMapValues<U>(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ transform: @escaping(T.Iterator.Element) throws -> U?) -> Promise<[U]> {
         return map(on: on, flags: flags) { foo -> [U] in
+            // 这里面, 不是 PMK 里面的 compact, 是 Sequence 里面的
             return try foo.compactMap(transform)
         }
     }
@@ -443,7 +447,7 @@ public extension Thenable where T: Sequence {
                               flags: DispatchWorkItemFlags? = nil,
                               _ transform: @escaping(T.Iterator.Element) throws -> U) -> Promise<[U.T]> {
         return then(on: on, flags: flags) {
-            // 这里, try 的 catch, 是 then 里面的逻辑. 
+            // 这里, try 的 catch, 是 then 里面的逻辑.
             when(fulfilled: try $0.map(transform))
         }
     }
@@ -480,6 +484,7 @@ public extension Thenable where T: Sequence {
      */
     func filterValues(on: DispatchQueue? = shareConf.defaultQueue.processing, flags: DispatchWorkItemFlags? = nil, _ isIncluded: @escaping (T.Iterator.Element) -> Bool) -> Promise<[T.Iterator.Element]> {
         return map(on: on, flags: flags) {
+            // 这里调用的是 Sequence 里面的函数. 
             $0.filter(isIncluded)
         }
     }

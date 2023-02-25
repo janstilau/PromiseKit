@@ -1,5 +1,6 @@
 import Dispatch
 
+// public func race<U: Thenable>(fulfilled thenables: [U]) -> Promise<U.T>
 @inline(__always)
 private func _race<U: Thenable>(_ thenables: [U]) -> Promise<U.T> {
     let rp = Promise<U.T>(.pending)
@@ -73,7 +74,8 @@ public func race<T>(_ guarantees: Guarantee<T>...) -> Guarantee<T> {
  - Warning: Skips all rejected promises.
  - Remark: If the provided array is empty, the returned promise is rejected with `PMKError.badInput`. If there are no fulfilled promises, the returned promise is rejected with `PMKError.noWinner`.
 */
-// 这里是, 只要 fulfulled 的结果, 所以要判断 result 的状态. 
+// 上面的 race, 是只要有一个 Promise Resolved 就可以, 这里是等待, 要有一个 fulfilled.
+// 所以下面会有 noWinner 的 error.
 public func race<U: Thenable>(fulfilled thenables: [U]) -> Promise<U.T> {
     var countdown = thenables.count
     guard countdown > 0 else {
