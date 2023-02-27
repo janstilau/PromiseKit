@@ -164,11 +164,14 @@ public extension CatchMixin {
      - Returns: A new promise, resolved with this promise’s resolution.
      */
     // then, catch 都是在特定的数据 enum 下才触发, ensure 则是不管数据如何, 触发自己的 Body 逻辑, 然后透传状态.
+    // 可以看到, 里面 body 是 () -> Void. 所以 ensure 里面执行的, 应该就是和数据无关的一些逻辑.
     func ensure(on: DispatchQueue? = shareConf.defaultQueue.end,
                 flags: DispatchWorkItemFlags? = nil,
                 _ body: @escaping () -> Void)
     -> Promise<T> {
         let rp = Promise<T>(.pending)
+        // 在 then, catch 里面, 是对 result 进行了判断, 在 fulfill 的时候, 执行 then 传入的逻辑. 在 rejected 的时候, 执行 catch 传入的逻辑.
+        // ensure 里面, 不管 result 的实际值如何, 执行 body, 然后透传 result 到下一个节点. 
         pipe { result in
             on.async(flags: flags) {
                 body()

@@ -24,6 +24,9 @@ import Dispatch
 
  - Note: the block you pass executes immediately on the current thread/queue.
  */
+// 这种写法, 主要是想要代码上更加的简练.
+// 这种写法, 就可以让所有的代码看起来一样.
+// 虽然里面也是增加了一个中转节点, 稍稍有点性能问题. 
 public func firstly<U: Thenable>(execute body: () throws -> U) -> Promise<U.T> {
     do {
         // 增加了一个中间节点, 但是让代码更加有的优雅. 
