@@ -1,7 +1,7 @@
 import class Foundation.Thread
 import Dispatch
 
-/**
+/*
  A `Promise` is a functional abstraction around a failable asynchronous operation.
  - See: `Thenable`
  */

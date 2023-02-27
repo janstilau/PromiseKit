@@ -11,19 +11,19 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 
 @implementation AnyPromise {
-    __AnyPromise *d;
+    __AnyPromise *internal_promise;
 }
 
 - (instancetype)initWith__D:(__AnyPromise *)dd {
     self = [super init];
-    if (self) self->d = dd;
+    if (self) self->internal_promise = dd;
     return self;
 }
 
 - (instancetype)initWithResolver:(PMKResolver __strong *)resolver {
     self = [super init];
     if (self)
-        d = [[__AnyPromise alloc] initWithResolver:^(void (^resolve)(id)) {
+        internal_promise = [[__AnyPromise alloc] initWithResolver:^(void (^resolve)(id)) {
             *resolver = resolve;
         }];
     return self;
@@ -44,17 +44,18 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 //TODO remove if possible, but used by when.m
 - (void)__pipe:(void (^)(id _Nullable))block {
-    [d __pipe:block];
+    [internal_promise __pipe:block];
 }
 
 //NOTE used by AnyPromise.swift
+// value for __d 的实现.
 - (id)__d {
-    return d;
+    return internal_promise;
 }
 
 - (AnyPromise *(^)(id))then {
     return ^(id block) {
-        return [self->d __thenOn:dispatch_get_main_queue() execute:^(id obj) {
+        return [self->internal_promise __thenOn:dispatch_get_main_queue() execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -62,7 +63,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(dispatch_queue_t, id))thenOn {
     return ^(dispatch_queue_t queue, id block) {
-        return [self->d __thenOn:queue execute:^(id obj) {
+        return [self->internal_promise __thenOn:queue execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -70,7 +71,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(id))thenInBackground {
     return ^(id block) {
-        return [self->d __thenOn:dispatch_get_global_queue(0, 0) execute:^(id obj) {
+        return [self->internal_promise __thenOn:dispatch_get_global_queue(0, 0) execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -78,7 +79,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(dispatch_queue_t, id))catchOn {
     return ^(dispatch_queue_t q, id block) {
-        return [self->d __catchOn:q execute:^(id obj) {
+        return [self->internal_promise __catchOn:q execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -86,7 +87,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(id))catch {
     return ^(id block) {
-        return [self->d __catchOn:dispatch_get_main_queue() execute:^(id obj) {
+        return [self->internal_promise __catchOn:dispatch_get_main_queue() execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -94,7 +95,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(id))catchInBackground {
     return ^(id block) {
-        return [self->d __catchOn:dispatch_get_global_queue(0, 0) execute:^(id obj) {
+        return [self->internal_promise __catchOn:dispatch_get_global_queue(0, 0) execute:^(id obj) {
             return PMKCallVariadicBlock(block, obj);
         }];
     };
@@ -102,32 +103,32 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 
 - (AnyPromise *(^)(dispatch_block_t))ensure {
     return ^(dispatch_block_t block) {
-        return [self->d __ensureOn:dispatch_get_main_queue() execute:block];
+        return [self->internal_promise __ensureOn:dispatch_get_main_queue() execute:block];
     };
 }
 
 - (AnyPromise *(^)(dispatch_queue_t, dispatch_block_t))ensureOn {
     return ^(dispatch_queue_t queue, dispatch_block_t block) {
-        return [self->d __ensureOn:queue execute:block];
+        return [self->internal_promise __ensureOn:queue execute:block];
     };
 }
 
 - (AnyPromise *(^)(dispatch_block_t))ensureInBackground {
     return ^(dispatch_block_t block) {
-        return [self->d __ensureOn:dispatch_get_global_queue(QOS_CLASS_UNSPECIFIED, 0) execute:block];
+        return [self->internal_promise __ensureOn:dispatch_get_global_queue(QOS_CLASS_UNSPECIFIED, 0) execute:block];
     };
 }
 
 - (id)wait {
-    return [d __wait];
+    return [internal_promise __wait];
 }
 
 - (BOOL)pending {
-    return [[d valueForKey:@"__pending"] boolValue];
+    return [[internal_promise valueForKey:@"__pending"] boolValue];
 }
 
 - (BOOL)rejected {
-    return IsError([d __value]);
+    return IsError([internal_promise __value]);
 }
 
 - (BOOL)fulfilled {
@@ -135,7 +136,7 @@ NSString *const PMKErrorDomain = @"PMKErrorDomain";
 }
 
 - (id)value {
-    id obj = [d __value];
+    id obj = [internal_promise __value];
 
     if ([obj isKindOfClass:[PMKArray class]]) {
         return obj[0];
