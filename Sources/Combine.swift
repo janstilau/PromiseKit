@@ -2,14 +2,12 @@
 #if canImport(Combine)
 import Combine
 
-/*
- Future 原本就是异步操作转入 Combine 的工具.
- 最终的 resolve 函数, 内嵌到了 promise 的 wrapper 方法内了. 其实还是异步操作回调的概念, 不过被 PromiseKit 封装了后续逻辑. 
- */
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 public extension Guarantee {
+    // Guarantee 代表着不会发生错误, 所以 Future<T, Never> 中的错误类型是 Never.
     func future() -> Future<T, Never> {
         .init { [weak self] promise in
+            // Done 代表着, 就是相应的最后一环, 内部会将下个节点收到的数据变为 Void.
             self?.done { value in
                 promise(.success(value))
             }

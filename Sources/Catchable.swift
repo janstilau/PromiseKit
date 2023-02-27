@@ -24,15 +24,14 @@ public extension CatchMixin {
      - Returns: A promise finalizer.
      - SeeAlso: [Cancellation](https://github.com/mxcl/PromiseKit/blob/master/Documentation/CommonPatterns.md#cancellation)
      */
-    // 因为 Catch 一般就是最后的处理, 所以返回值可以不做处理.
+    // 如果不想添加 finally, 那么 catch 就当做最后一步了, 所以可以不进行 return value 的处理.
     @discardableResult
     func `catch`(on: DispatchQueue? = shareConf.defaultQueue.end,
                  flags: DispatchWorkItemFlags? = nil,
                  policy: CatchPolicy = shareConf.catchPolicy,
                  _ body: @escaping(Error) -> Void) -> PMKFinalizer {
+        // catch 中, 生成 PMKFinalizer 一定会进行 resolved.
         let finalizer = PMKFinalizer()
-        // catch 中, 保证了生成的 finalizer 中的 Thenable 一定会触发状态 Resolve. 而 Finnally 则是在这个 Thenable 中添加回调.
-        // 所以 finally 里面的内容, 一定会触发.
         pipe {
             switch $0 {
             case .rejected(let error):
@@ -208,7 +207,8 @@ public extension CatchMixin {
         let rp = Promise<T>(.pending)
         pipe { result in
             on.async(flags: flags) {
-                // ensure 具有了异步操作的特性了.
+                // 原本, ensure 就是拿到 Reuslt 做一些操做.
+                // 但是如果想要 ensure 之后, 添加一些新的操作, 那么就将 rp 的 resolve 事件延后, 等到 ensure 返回的异步操作 resolve 之后, rp 才进行 resolve.
                 body().done {
                     rp.box.seal(result)
                 }

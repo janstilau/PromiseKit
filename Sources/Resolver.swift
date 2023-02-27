@@ -18,6 +18,7 @@ public final class Resolver<T> {
 }
 
 // 提供了更加方便的方法, 去调用 box 的 seal 方法.
+// 以下的各个方法, 之所以设计出来, 还是想要将原本的通过闭包的方式完成的代码, 直接使用 Resolve 完成转换. 
 public extension Resolver {
     /// Fulfills the promise with the provided value
     func fulfill(_ value: T) {

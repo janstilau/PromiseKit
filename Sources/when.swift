@@ -6,7 +6,7 @@ import Dispatch
  */
 
 // 没有关于 Output 的限制. 这里就是在等待, 所有的 Promise 完成之后的一个事件而已.
-private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
+private func _whenAllFulfilled<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
     var countdown = thenables.count
     guard countdown > 0 else {
         return .value(Void())
@@ -32,8 +32,10 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
                     }
                 case .fulfilled:
                     guard rp.isPending else { return }
+                    // promise 的 result fullfil 的具体值一点意义都没有, 仅仅是接收到这个事件而已
                     countdown -= 1
                     if countdown == 0 {
+                        // 当, 所有的 Promise 都有结果之后, 才进行 return promise resolve
                         rp.box.seal(.fulfilled(()))
                     }
                 }
@@ -44,7 +46,8 @@ private func _when<U: Thenable>(_ thenables: [U]) -> Promise<Void> {
     return rp
 }
 
-private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
+// 和上面的 Thenable 相比, Guarantee 不需要考虑 Rejected 的逻辑, 所以处理逻辑稍微简单一些.
+private func __whenAllResolved<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
     var countdown = guarantees.count
     guard countdown > 0 else {
         return .value(Void())
@@ -92,48 +95,60 @@ private func __when<T>(_ guarantees: [Guarantee<T>]) -> Guarantee<Void> {
  - Note: `when` provides `NSProgress`.
  - SeeAlso: `when(resolved:)`
 */
-// AllPromise 的实现.
+// 相比较于, 还需要在 when 内部去记录每个小的 promise 的 result 值的实现.
+// 这种等待所有的 Promise 完结之后, 使用 map 来从 thenables 统一取值的方式, 会让代码更加的优雅.
+// 因为 _whenAllFulfilled 这样一个类似于事件触发的机制, 会代码很强的可复用性.
+// 因为, _whenAllFulfilled 触发的时候, 各个 Thenable 里面的值都是 resolve 的, 而 Promise 这种机制, 就是确定了内部状态不可能会发生变化了. 等待 allFulfill 取值是一个 get 行为, 一定不会引起内存问题.
 public func when<U: Thenable>(fulfilled thenables: [U]) -> Promise<[U.T]> {
     // thenables.map 中的 map, 是 Sequence 里面的 map.
     // _when 返回的 Promise 能够 fulfilled, 就代表着 thenables 里面都有值了.
     // 这个时候, 就能够使用 value 来获取里面的值了.
-    return _when(thenables).map(on: nil) { thenables.map{ $0.value! } }
+    return _whenAllFulfilled(thenables).map(on: nil) { thenables.map{ $0.value! } }
 }
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable>(fulfilled promises: U...) -> Promise<Void> where U.T == Void {
-    return _when(promises)
+    return _whenAllFulfilled(promises)
 }
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable>(fulfilled promises: [U]) -> Promise<Void> where U.T == Void {
-    return _when(promises)
+    return _whenAllFulfilled(promises)
 }
 
 /*
- When 只是达到了, 所有的都完成了这一事件的监听.
- 想要获取到里面的值, 还需要专门的进行一次抽取.
+ 在这里, _whenAllFulfilled 这个表示所有的事件完成了的信号, 得到了复用.
+ 在 _whenAllFulfilled 发出之后, 使用 map 去取各个 thenable 的值.
+ 
+ 这种不同类型的, 都需要编写响应函数的实现, 使用编译器特性来完成调用的匹配, 这种生成的代码, 都有着相同的使用思路.
+ 不可能达到无限的参数的, 一般都会涉及一个上限值.
  */
-
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable, V: Thenable>(fulfilled pu: U, _ pv: V) -> Promise<(U.T, V.T)> {
-    return _when([pu.asVoid(), pv.asVoid()]).map(on: nil) { (pu.value!, pv.value!) }
+    return _whenAllFulfilled([pu.asVoid(), pv.asVoid()]).map(on: nil) { (pu.value!, pv.value!) }
 }
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable, V: Thenable, W: Thenable>(fulfilled pu: U, _ pv: V, _ pw: W) -> Promise<(U.T, V.T, W.T)> {
-    return _when([pu.asVoid(), pv.asVoid(), pw.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!) }
+    return _whenAllFulfilled([pu.asVoid(), pv.asVoid(), pw.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!) }
 }
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable, V: Thenable, W: Thenable, X: Thenable>(fulfilled pu: U, _ pv: V, _ pw: W, _ px: X) -> Promise<(U.T, V.T, W.T, X.T)> {
-    return _when([pu.asVoid(), pv.asVoid(), pw.asVoid(), px.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!, px.value!) }
+    return _whenAllFulfilled([pu.asVoid(), pv.asVoid(), pw.asVoid(), px.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!, px.value!) }
 }
 
 /// Wait for all promises in a set to fulfill.
 public func when<U: Thenable, V: Thenable, W: Thenable, X: Thenable, Y: Thenable>(fulfilled pu: U, _ pv: V, _ pw: W, _ px: X, _ py: Y) -> Promise<(U.T, V.T, W.T, X.T, Y.T)> {
-    return _when([pu.asVoid(), pv.asVoid(), pw.asVoid(), px.asVoid(), py.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!, px.value!, py.value!) }
+    return _whenAllFulfilled([pu.asVoid(), pv.asVoid(), pw.asVoid(), px.asVoid(), py.asVoid()]).map(on: nil) { (pu.value!, pv.value!, pw.value!, px.value!, py.value!) }
 }
+
+
+
+
+
+
+
 
 /**
  Generate promises at a limited rate and wait for all to fulfill.
@@ -412,25 +427,25 @@ public func when(guarantees: [Guarantee<Void>]) -> Guarantee<Void> {
 
 /// Waits on all provided Guarantees.
 public func when<T>(guarantees: [Guarantee<T>]) -> Guarantee<[T]> {
-    return __when(guarantees).map(on: nil) { guarantees.map { $0.value! } }
+    return __whenAllResolved(guarantees).map(on: nil) { guarantees.map { $0.value! } }
 }
 
 /// Waits on all provided Guarantees.
 public func when<U, V>(guarantees gu: Guarantee<U>, _ gv: Guarantee<V>) -> Guarantee<(U, V)> {
-    return __when([gu.asVoid(), gv.asVoid()]).map(on: nil) { (gu.value!, gv.value!) }
+    return __whenAllResolved([gu.asVoid(), gv.asVoid()]).map(on: nil) { (gu.value!, gv.value!) }
 }
 
 /// Waits on all provided Guarantees.
 public func when<U, V, W>(guarantees gu: Guarantee<U>, _ gv: Guarantee<V>, _ gw: Guarantee<W>) -> Guarantee<(U, V, W)> {
-    return __when([gu.asVoid(), gv.asVoid(), gw.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!) }
+    return __whenAllResolved([gu.asVoid(), gv.asVoid(), gw.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!) }
 }
 
 /// Waits on all provided Guarantees.
 public func when<U, V, W, X>(guarantees gu: Guarantee<U>, _ gv: Guarantee<V>, _ gw: Guarantee<W>, _ gx: Guarantee<X>) -> Guarantee<(U, V, W, X)> {
-    return __when([gu.asVoid(), gv.asVoid(), gw.asVoid(), gx.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!, gx.value!) }
+    return __whenAllResolved([gu.asVoid(), gv.asVoid(), gw.asVoid(), gx.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!, gx.value!) }
 }
 
 /// Waits on all provided Guarantees.
 public func when<U, V, W, X, Y>(guarantees gu: Guarantee<U>, _ gv: Guarantee<V>, _ gw: Guarantee<W>, _ gx: Guarantee<X>, _ gy: Guarantee<Y>) -> Guarantee<(U, V, W, X, Y)> {
-    return __when([gu.asVoid(), gv.asVoid(), gw.asVoid(), gx.asVoid(), gy.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!, gx.value!, gy.value!) }
+    return __whenAllResolved([gu.asVoid(), gv.asVoid(), gw.asVoid(), gx.asVoid(), gy.asVoid()]).map(on: nil) { (gu.value!, gv.value!, gw.value!, gx.value!, gy.value!) }
 }
