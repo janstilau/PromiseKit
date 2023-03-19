@@ -14,6 +14,8 @@ import Dispatch
  这就是 Map 的实现方式.
  Map 的这种实现方式, 就是按照节点顺序将值进行操作, 然后传递给后续节点中. 没有触发新的节点的生成.
  
+
+ 
  如果.
  给我添加了一个回调, 这个回调里面我将自身的 Result 产生了另外的一个中间节点 Promise.
  给这个中间节点添加一个回调. 当中间节点的状态 Resolved 之后, 会触发这个添加的回调.
@@ -21,6 +23,8 @@ import Dispatch
  这就是 Promise 实现异步连接的原理.
  在原本生成的 Promise 链条里面, 后一个节点的状态, 需要等到中间节点的 Resule 结果来确定, 而这个中间节点一般会伴随着异步操作.
  这样就达到了 Promise 进行一步操作链接的效果了.
+ 
+ 
  
  以上的这些, 都被 Thenable 封装到了 Map, Then 的实现里面, 所以 Promise 里面的逻辑很少.
  
@@ -54,12 +58,14 @@ public protocol Thenable: AnyObject {
 // 在捕获的 catch 里面, 进行了 reject. 正是因为如此, Thenable 里面 catch 面对的是 通用 error, 因为具体的错误类型, 会随着闭包的不同而不同.
 // 这也是 Combine 里面, 错误一旦有了 try 的节点掺入, 错误处理都会变为 Error 类型.
 public extension Thenable {
+    
     /*
      The provided closure executes when this promise is fulfilled.
      
      This allows chaining promises.
      // 中间生成的 Promise 先 resolve, return 的 Promise 后 resolve.
-     The promise returned by the provided closure is resolved before the promise returned by this closure resolves.
+     The promise returned by the provided closure is resolved before
+     the promise returned by this closure resolves.
      
      - Parameter on: The queue to which the provided closure dispatches.
      - Parameter body: The closure that executes when this promise is fulfilled. It must return a promise.
@@ -117,6 +123,7 @@ public extension Thenable {
     /*
      The provided closure is executed when this promise is fulfilled.
      
+     一般来说, 我们不会直接使用该方法, 使用 PromiseKit 还是想要进行异步方法的串联.
      This is like `then` but it requires the closure to return a non-promise.
      
      - Parameter on: The queue to which the provided closure dispatches.
@@ -140,6 +147,7 @@ public extension Thenable {
             switch $0 {
             case .fulfilled(let value):
                 // Js 里面, 是由类型判断完成的, 在 Swift 则是由特定的方法有着更加显式地表示.
+                // 这种 map, 其实也是异步 map. 所以也算是异步操作了. 只不过这种异步操作逻辑已经由 map 这个名称确定了.
                 on.async(flags: flags) {
                     do {
                         // map 的含义, 其实就是 transform.
@@ -159,14 +167,16 @@ public extension Thenable {
     
     /*
      The provided closure is executed when this promise is fulfilled.
-     
+
+     // 在 Compact 的语境下, 如果返回 nil 被作者认为是错误.
      In your closure return an `Optional`,
      if you return `nil` the resulting promise is rejected with `PMKError.compactMap`, otherwise the promise is fulfilled with the unwrapped value.
      
      firstly {
-     URLSession.shared.dataTask(.promise, with: url)
+        URLSession.shared.dataTask(.promise, with: url)
      }.compactMap {
-     try JSONSerialization.jsonObject(with: $0.data) as? [String: String]
+     // 这里如果发生 error, 或者 为 nil, 都会被 reject.
+        try JSONSerialization.jsonObject(with: $0.data) as? [String: String]
      }.done { dictionary in
      //…
      }.catch {
@@ -183,13 +193,14 @@ public extension Thenable {
             case .fulfilled(let value):
                 on.async(flags: flags) {
                     do {
-                        // 如果无法获取到值, 直接就当错误处理了, 由下方的 catch 进行处理.
+                        // 如果返回值是 nil, 直接 rejejct.
                         if let rv = try transform(value) {
                             rp.box.seal(.fulfilled(rv))
                         } else {
                             throw PMKError.compactMap(value, U.self)
                         }
                     } catch {
+                        // 如果 transform 发生错误, 直接 reject.
                         rp.box.seal(.rejected(error))
                     }
                 }
@@ -218,6 +229,7 @@ public extension Thenable {
      */
     // Done 返回的是 Promise<Void>, 是一个特殊的类型.
     // 从业务逻辑上来讲, Void 的 Output 就不应该有后续的 Promise 了, 因为 Void 无法给后续任务带来输入.
+    // 但是它还是返回 PROMISE, 因为需要添加 catch, filnally 到后面.
     func done(on: DispatchQueue? = shareConf.defaultQueue.end,
               flags: DispatchWorkItemFlags? = nil,
               _ body: @escaping(T) throws -> Void)
@@ -231,7 +243,6 @@ public extension Thenable {
                 on.async(flags: flags) {
                     do {
                         // 直接进行 body 的调用, 后续的节点, 只会获取到 Void Output.
-                        // 不过这还是
                         try body(value)
                         rp.box.seal(.fulfilled(()))
                     } catch {
@@ -296,6 +307,9 @@ public extension Thenable {
         // 所以 return Promise init 的同时, 将 resolve return Promise 的逻辑, pipe 到了当前的 Promise 回调里面了.
         // tap 并不限制 Result 的状态. 所以失败了也会触发.
         return Promise { seal in
+            // seal 相当于是 fulfill 和 reject 两个函数的结合.
+            // 这个 Pipe, 是 self.pipe, 也就是调用 tap 的 Promise.
+            // returnedPromise 的状态, 要在 self 的状态完成后触发闭包,  闭包里面, 使用 seal 来确定 returnedPromise 的状态.
             pipe { result in
                 on.async(flags: flags) {
                     body(result)

@@ -166,6 +166,7 @@ public extension CatchMixin {
      */
     // then, catch 都是在特定的数据 enum 下才触发, ensure 则是不管数据如何, 触发自己的 Body 逻辑, 然后透传状态.
     // 可以看到, 里面 body 是 () -> Void. 所以 ensure 里面执行的, 应该就是和数据无关的一些逻辑.
+    // 相比较于 tap, ensure 其实并不需要参数. 可以认为是事件流之外的一些逻辑.
     func ensure(on: DispatchQueue? = shareConf.defaultQueue.end,
                 flags: DispatchWorkItemFlags? = nil,
                 _ body: @escaping () -> Void)

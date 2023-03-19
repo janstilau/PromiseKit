@@ -17,7 +17,10 @@ enum Sealant<R> {
 // - Remark: not protocol ∵ http://www.russbishop.net/swift-associated-types-cont
 // 在 Promise 的定义里面, 是这样的 Box Box<Result<T>>
 class Box<T> {
+    // 用来返回当前的 Promise 状态.
     func inspect() -> Sealant<T> { fatalError() }
+    // 用来存储闭包的. BLOCK 会在所的环境下进行.
+    // 这是一个比较好的实现方法, Swift 很多 API , with 开头的都是这样做的, 将环境搭设完毕之后进行操作. 
     func inspect(_: (Sealant<T>) -> Void) { fatalError() }
     func seal(_: T) {}
 }
@@ -42,6 +45,7 @@ class EmptyBox<T>: Box<T> {
     // 都是用的 sync, 这 concurrent 个屁
     private let barrier = DispatchQueue(label: "org.promisekit.barrier", attributes: .concurrent)
     
+    // Resolve 数据的过程.
     override func seal(_ value: T) {
         var handlers: Handlers<T>!
         /*
@@ -54,7 +58,7 @@ class EmptyBox<T>: Box<T> {
             //            if sealant == .pending {
             //                print("可以这样判断")
             //            }
-            // 如果想要不做提取, 直接使用 case 进行判断, 要使用这个特殊的形式.
+            // 如果想要不做提取, 直接使用 case 进行判断, 要使用这个特殊的形式. 使用这个特殊的形式, 倒是不用进行值的抽取就可以.
             //            if case .pending = sealant {
             //                return
             //            }
@@ -62,16 +66,18 @@ class EmptyBox<T>: Box<T> {
             guard case .pending(let _handlers) = self.sealant else {
                 return  // already fulfilled!
             }
+            // 在多线程的环境下, 如何尽可能小的控制临界区, 是一个值得注意的点.
             handlers = _handlers
             self.sealant = .resolved(value)
         }
         
-        // 将, 封存状态然后调用存储闭包的逻辑, 写到了 Box 的内部.
+        // 在临界区外, 进行回调的触发.
         if let handlers = handlers {
             handlers.bodies.forEach{ $0(value) }
         }
     }
     
+    // 这是一个惯例写法, 所有在多线程环境的 get 方法, 都是这样来写的.
     override func inspect() -> Sealant<T> {
         var rv: Sealant<T>!
         barrier.sync {
@@ -80,6 +86,7 @@ class EmptyBox<T>: Box<T> {
         return rv
     }
     
+    // 在 pending 状态下, 进行 Block 的添加会使用该方法, 就是 sealant 是一个 enum, 单例里面的 Handler 是一个引用值, 所以不用考虑 inout 的传递.
     override func inspect(_ body: (Sealant<T>) -> Void) {
         var sealed = false
         barrier.sync(flags: .barrier) {
